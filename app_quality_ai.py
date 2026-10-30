@@ -2,14 +2,15 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from docx import Document
-from docx.shared import Pt, Cm
+from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 import io
 import re
 from datetime import datetime
+import os
 
-st.set_page_config(page_title="Quality AI PRO - FINAL", page_icon="📄", layout="wide")
+st.set_page_config(page_title="Quality AI PRO - Auto Template", page_icon="📄", layout="wide")
 
 def msa_tab():
     st.subheader("📊 MSA Gage R&R Dashboard")
@@ -32,32 +33,28 @@ def msa_tab():
         fig = px.histogram(df, x="Measurement", color="Operator", title="MSA Distribution")
         st.plotly_chart(fig, use_container_width=True)
 
-def create_wi_final(template_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, steps_text):
-    doc = Document(template_file)
+def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, steps_text):
+    doc = Document(template_path_or_file)
     saved_tables = list(doc.tables)
     for tbl in saved_tables:
         try:
             tbl._tbl.getparent().remove(tbl._tbl)
         except:
             pass
-
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run(f"WORK INSTRUCTION\n{proc}\nProduct: {product}\nDocument No: {doc_no}")
     run.bold = True
     run.font.size = Pt(14)
-
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run(f"Doc: {doc_no} | Temp: {temp_no} | Rev: {rev} | Date: {datetime.now().strftime('%d/%m/%Y')}")
     run.font.size = Pt(8)
     run.bold = True
-
     p = doc.add_paragraph()
     run = p.add_run("Langkah Kerja")
     run.bold = True
     run.font.size = Pt(11)
-
     t2 = doc.add_table(rows=1, cols=2)
     t2.alignment = WD_TABLE_ALIGNMENT.CENTER
     t2.style = 'Table Grid'
@@ -65,7 +62,6 @@ def create_wi_final(template_file, doc_no, product, temp_no, rev, proc, part_req
     t2.cell(0,1).text = "Time (min)"
     t2.cell(0,0).paragraphs[0].runs[0].bold = True
     t2.cell(0,1).paragraphs[0].runs[0].bold = True
-
     total = 0
     for _, row in time_df.iterrows():
         rw = t2.add_row().cells
@@ -80,7 +76,6 @@ def create_wi_final(template_file, doc_no, product, temp_no, rev, proc, part_req
     rw[1].text = str(total)
     rw[0].paragraphs[0].runs[0].bold = True
     rw[1].paragraphs[0].runs[0].bold = True
-
     doc.add_paragraph("")
     p = doc.add_paragraph()
     p.add_run("Part required :").bold = True
@@ -91,7 +86,6 @@ def create_wi_final(template_file, doc_no, product, temp_no, rev, proc, part_req
     for it in tools_req.split('\n'):
         if it.strip(): doc.add_paragraph(f"●  {it.strip()}")
     doc.add_paragraph("")
-
     pattern = r"(Step\s*\d+\s*:.*)"
     parts = re.split(pattern, steps_text, flags=re.I)
     steps = []
@@ -102,7 +96,6 @@ def create_wi_final(template_file, doc_no, product, temp_no, rev, proc, part_req
         steps.append((title, bullets))
     if not steps:
         steps = [("Work Steps", [x for x in steps_text.split('\n') if x.strip()])]
-
     for title, bullets in steps:
         p = doc.add_paragraph()
         p.add_run(title).bold = True
@@ -110,12 +103,10 @@ def create_wi_final(template_file, doc_no, product, temp_no, rev, proc, part_req
             if b:
                 clean = re.sub(r'^[•\-\*]\s*', '', b)
                 doc.add_paragraph(f"●  {clean}")
-
     doc.add_page_break()
     for tbl in saved_tables:
         doc._body._element.append(tbl._tbl)
         doc.add_paragraph("")
-
     try:
         hist_table = doc.tables[-1]
         hist_table.cell(2,1).text = datetime.now().strftime("%m/%d/%Y")
@@ -126,9 +117,35 @@ def create_wi_final(template_file, doc_no, product, temp_no, rev, proc, part_req
     return doc
 
 def wi_tab():
-    st.subheader("📄 WI Generator - FINAL")
-    st.success("Logo tetap, WI di atas, Approval di bawah")
-    template_file = st.file_uploader("Upload Template TMP-Common-General-0002 (.docx)", type=["docx"])
+    st.subheader("📄 WI Generator - Auto Template")
+    auto_template_path = "TMP-Common-General-0002-Template WI Landscape.docx"
+    # Cek semua kemungkinan nama file template
+    possible_names = [
+        "TMP-Common-General-0002-Template WI Landscape.docx",
+        "TMP-Common-General-0002-Template_WI_Landscape.docx",
+        "TMP-Common-General-0002-Template WI Lan.docx"
+    ]
+    template_file = None
+    found_name = None
+    for name in possible_names:
+        if os.path.exists(name):
+            found_name = name
+            template_file = name
+            break
+    # Juga cek file yang mengandung TMP
+    if not template_file:
+        for f in os.listdir("."):
+            if "TMP" in f and f.endswith(".docx"):
+                found_name = f
+                template_file = f
+                break
+    
+    if template_file:
+        st.success(f"✅ Template otomatis ditemukan: {found_name} - Logo tetap, Approval & History di BAWAH!")
+    else:
+        st.warning("Template belum terdeteksi. Upload manual:")
+        template_file = st.file_uploader("Upload Template (.docx)", type=["docx"])
+
     c1, c2 = st.columns(2)
     with c1:
         doc_no = st.text_input("Document No", "WIN-13-005-0015")
@@ -148,20 +165,20 @@ def wi_tab():
         {"step": "Step 6 : 2nd Visual Check", "time": 5},
         {"step": "Step 7 : Ionizer", "time": 5},
     ]), num_rows="dynamic", use_container_width=True)
-    raw = st.text_area("Detail Langkah", "Step 1 :  Susun Tips\nSusun LV tips di atas tatakan\nStep 2 :  Check visual defect\nCek dengan lampu LED 30cm", height=220)
+    raw = st.text_area("Detail Langkah", "Step 1 :  Susun Tips\nSusun LV tips di atas tatakan\nStep 2 :  Check visual defect\nCek dengan lampu LED 30cm\nStep 3 :  Data Tips OK dan Tips Reject\nCatat jumlah tips OK dan Reject\nStep 4 :  Packing LV Tips\nMasukkan kembali tips OK ke plastik", height=220)
 
-    if st.button("✨ Generate WI FINAL", type="primary", use_container_width=True):
+    if st.button("✨ Generate WI FINAL - Approval di Bawah", type="primary", use_container_width=True):
         if not template_file:
-            st.error("Upload dulu template landscape!")
+            st.error("Template tidak ditemukan!")
             return
         doc = create_wi_final(template_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, raw)
         bio = io.BytesIO()
         doc.save(bio)
         bio.seek(0)
-        st.success(f"WI {doc_no} jadi!")
-        st.download_button("📥 Download WI FINAL", data=bio, file_name=f"{doc_no}_FINAL.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+        st.success(f"WI {doc_no} jadi! Logo tetap, WI di atas, Approval & History di BAWAH!")
+        st.download_button("📥 Download WI FINAL", data=bio, file_name=f"{doc_no}_FINAL_ApprovalBawah_{product}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
-st.title("📊 Quality AI PRO - MSA + WI FINAL")
+st.title("📊 Quality AI PRO - MSA + WI Auto Template")
 tab1, tab2 = st.tabs(["📊 MSA Dashboard", "📄 WI Generator"])
 with tab1:
     msa_tab()
