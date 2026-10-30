@@ -1,0 +1,6 @@
+javascriptstreamlit
+pandas
+numpy
+matplotlib
+scipy
+openpyxl
