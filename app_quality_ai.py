@@ -10,7 +10,7 @@ import re
 from datetime import datetime
 import os
 
-st.set_page_config(page_title="Quality AI PRO - Auto Template", page_icon="📄", layout="wide")
+st.set_page_config(page_title="Quality AI PRO - Auto Template FIX", page_icon="📄", layout="wide")
 
 def msa_tab():
     st.subheader("📊 MSA Gage R&R Dashboard")
@@ -57,11 +57,20 @@ def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, 
     run.font.size = Pt(11)
     t2 = doc.add_table(rows=1, cols=2)
     t2.alignment = WD_TABLE_ALIGNMENT.CENTER
-    t2.style = 'Table Grid'
+    try:
+        t2.style = 'Table Grid'
+    except:
+        try:
+            t2.style = 'Light Grid'
+        except:
+            pass
     t2.cell(0,0).text = "Langkah Kerja"
     t2.cell(0,1).text = "Time (min)"
-    t2.cell(0,0).paragraphs[0].runs[0].bold = True
-    t2.cell(0,1).paragraphs[0].runs[0].bold = True
+    try:
+        t2.cell(0,0).paragraphs[0].runs[0].bold = True
+        t2.cell(0,1).paragraphs[0].runs[0].bold = True
+    except:
+        pass
     total = 0
     for _, row in time_df.iterrows():
         rw = t2.add_row().cells
@@ -74,8 +83,11 @@ def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, 
     rw = t2.add_row().cells
     rw[0].text = "Total"
     rw[1].text = str(total)
-    rw[0].paragraphs[0].runs[0].bold = True
-    rw[1].paragraphs[0].runs[0].bold = True
+    try:
+        rw[0].paragraphs[0].runs[0].bold = True
+        rw[1].paragraphs[0].runs[0].bold = True
+    except:
+        pass
     doc.add_paragraph("")
     p = doc.add_paragraph()
     p.add_run("Part required :").bold = True
@@ -117,35 +129,19 @@ def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, 
     return doc
 
 def wi_tab():
-    st.subheader("📄 WI Generator - Auto Template")
-    auto_template_path = "TMP-Common-General-0002-Template WI Landscape.docx"
-    # Cek semua kemungkinan nama file template
-    possible_names = [
-        "TMP-Common-General-0002-Template WI Landscape.docx",
-        "TMP-Common-General-0002-Template_WI_Landscape.docx",
-        "TMP-Common-General-0002-Template WI Lan.docx"
-    ]
+    st.subheader("📄 WI Generator - Auto Template FIX")
     template_file = None
     found_name = None
-    for name in possible_names:
-        if os.path.exists(name):
-            found_name = name
-            template_file = name
+    for f in os.listdir("."):
+        if "TMP" in f and f.endswith(".docx"):
+            found_name = f
+            template_file = f
             break
-    # Juga cek file yang mengandung TMP
-    if not template_file:
-        for f in os.listdir("."):
-            if "TMP" in f and f.endswith(".docx"):
-                found_name = f
-                template_file = f
-                break
-    
     if template_file:
-        st.success(f"✅ Template otomatis ditemukan: {found_name} - Logo tetap, Approval & History di BAWAH!")
+        st.success(f"✅ Template otomatis: {found_name} | Logo tetap, Approval di BAWAH!")
     else:
-        st.warning("Template belum terdeteksi. Upload manual:")
+        st.warning("Template belum ada, upload manual:")
         template_file = st.file_uploader("Upload Template (.docx)", type=["docx"])
-
     c1, c2 = st.columns(2)
     with c1:
         doc_no = st.text_input("Document No", "WIN-13-005-0015")
@@ -166,7 +162,6 @@ def wi_tab():
         {"step": "Step 7 : Ionizer", "time": 5},
     ]), num_rows="dynamic", use_container_width=True)
     raw = st.text_area("Detail Langkah", "Step 1 :  Susun Tips\nSusun LV tips di atas tatakan\nStep 2 :  Check visual defect\nCek dengan lampu LED 30cm\nStep 3 :  Data Tips OK dan Tips Reject\nCatat jumlah tips OK dan Reject\nStep 4 :  Packing LV Tips\nMasukkan kembali tips OK ke plastik", height=220)
-
     if st.button("✨ Generate WI FINAL - Approval di Bawah", type="primary", use_container_width=True):
         if not template_file:
             st.error("Template tidak ditemukan!")
@@ -175,10 +170,10 @@ def wi_tab():
         bio = io.BytesIO()
         doc.save(bio)
         bio.seek(0)
-        st.success(f"WI {doc_no} jadi! Logo tetap, WI di atas, Approval & History di BAWAH!")
+        st.success(f"WI {doc_no} jadi! Approval & History di BAWAH!")
         st.download_button("📥 Download WI FINAL", data=bio, file_name=f"{doc_no}_FINAL_ApprovalBawah_{product}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
-st.title("📊 Quality AI PRO - MSA + WI Auto Template")
+st.title("📊 Quality AI PRO - Auto Template FIX")
 tab1, tab2 = st.tabs(["📊 MSA Dashboard", "📄 WI Generator"])
 with tab1:
     msa_tab()
