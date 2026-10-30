@@ -70,7 +70,7 @@ def fill_template_doc(template_file, product, part_no, process, steps):
     title_run.font.size = Pt(12)
     
     table = doc.add_table(rows=1, cols=5)
-    table.style = 'Light Shading'
+    table.style = 'Table Grid'
     hdr = table.rows[0].cells
     hdr[0].text = 'No'
     hdr[1].text = 'Langkah Kerja (Baku)'
