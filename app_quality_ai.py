@@ -35,37 +35,87 @@ def msa_tab():
     st.success("MSA Dashboard Aktif")
 
 # ================= TAB 2: WI LANDSCAPE PAKAI TEMPLATE ASLI =================
-def create_wi_landscape(template_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, steps_text):
-    # Load template landscape asli
-    doc = Document(template_file)
+def create_wi_landscape(template_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, steps_text, approval_di_bawah=False):
+    template_doc = Document(template_file)
     
-    # Isi Document History otomatis
+    # Ambil 2 tabel dari template asli buat dipindah
+    approval_table_data = []
+    history_table_data = []
     try:
-        hist_table = doc.tables[1]
-        if len(hist_table.rows) > 2:
-            hist_table.cell(2,1).text = datetime.now().strftime("%m/%d/%Y")
-            hist_table.cell(2,2).text = rev
-            hist_table.cell(2,3).text = f"{proc} - {product}"
+        # Table 0 = Approval
+        for row in template_doc.tables[0].rows:
+            approval_table_data.append([cell.text for cell in row.cells])
+        # Table 1 = History
+        for row in template_doc.tables[1].rows:
+            history_table_data.append([cell.text for cell in row.cells])
     except:
         pass
 
-    doc.add_paragraph("") # spasi
-    doc.add_paragraph("") 
+    # Buat dokumen baru landscape
+    doc = Document()
+    # Set landscape
+    section = doc.sections[0]
+    section.orientation = 1 # LANDSCAPE
+    section.page_width = Cm(29.7)
+    section.page_height = Cm(21.0)
+    section.top_margin = Cm(1.5)
+    section.bottom_margin = Cm(1)
+    section.left_margin = Cm(1.5)
+    section.right_margin = Cm(1.5)
 
-    # Judul besar tengah
+    s = doc.styles['Normal']
+    s.font.name = 'Arial'
+    s.font.size = Pt(9)
+
+    def add_approval_history(doc):
+        doc.add_paragraph("")
+        p = doc.add_paragraph()
+        r = p.add_run("APPROVAL DOCUMENT")
+        r.bold = True
+        
+        t = doc.add_table(rows=len(approval_table_data), cols=4)
+        try: t.style = 'Grid Table Light'
+        except: pass
+        for ri, row_data in enumerate(approval_table_data):
+            for ci, txt in enumerate(row_data):
+                if ci < 4:
+                    t.cell(ri, ci).text = txt
+
+        doc.add_paragraph("")
+        p = doc.add_paragraph()
+        r = p.add_run("DOCUMENT HISTORY")
+        r.bold = True
+        
+        t2 = doc.add_table(rows=len(history_table_data), cols=5)
+        try: t2.style = 'Grid Table Light'
+        except: pass
+        for ri, row_data in enumerate(history_table_data):
+            for ci, txt in enumerate(row_data):
+                if ci < 5:
+                    t2.cell(ri, ci).text = txt
+        # Update history row 2 dengan data baru
+        try:
+            t2.cell(2,1).text = datetime.now().strftime("%m/%d/%Y")
+            t2.cell(2,2).text = rev
+            t2.cell(2,3).text = f"{proc} - {product}"
+        except: pass
+
+    # === JIKA APPROVAL DI ATAS (default template) ===
+    if not approval_di_bawah:
+        add_approval_history(doc)
+
+    # === ISI WI ===
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run(f"WORK INSTRUCTION\n{proc}\nProduct: {product}\nDocument No: {doc_no}")
     run.bold = True
     run.font.size = Pt(14)
 
-    # Info Box
     p = doc.add_paragraph()
-    run = p.add_run(f"Document No: {doc_no} | Temp: {temp_no} | Rev: {rev} | Release: {datetime.now().strftime('%d/%m/%Y')} | Process: {proc}")
+    run = p.add_run(f"Doc: {doc_no} | Temp: {temp_no} | Rev: {rev} | Date: {datetime.now().strftime('%d/%m/%Y')}")
     run.font.size = Pt(8)
     run.bold = True
 
-    # Tabel Langkah Kerja (2 kolom seperti PDF asli)
     p = doc.add_paragraph()
     run = p.add_run("Langkah Kerja")
     run.bold = True
@@ -73,16 +123,10 @@ def create_wi_landscape(template_file, doc_no, product, temp_no, rev, proc, part
 
     t2 = doc.add_table(rows=1, cols=2)
     t2.alignment = WD_TABLE_ALIGNMENT.CENTER
-    try:
-        t2.style = 'Grid Table Light'
-    except:
-        pass
-
+    try: t2.style = 'Grid Table Light'
+    except: pass
     t2.cell(0,0).text = "Langkah Kerja"
     t2.cell(0,1).text = "Time (min)"
-    for cell in t2.rows[0].cells:
-        for par in cell.paragraphs:
-            for r in par.runs: r.bold = True
 
     total = 0
     for _, row in time_df.iterrows():
@@ -94,13 +138,8 @@ def create_wi_landscape(template_file, doc_no, product, temp_no, rev, proc, part
     rw = t2.add_row().cells
     rw[0].text = "Total"
     rw[1].text = str(total)
-    for c in rw:
-        for par in c.paragraphs:
-            for r in par.runs: r.bold = True
 
     doc.add_paragraph("")
-
-    # Part & Tools
     p = doc.add_paragraph()
     r = p.add_run("Part required :")
     r.bold = True
@@ -114,8 +153,6 @@ def create_wi_landscape(template_file, doc_no, product, temp_no, rev, proc, part
         if it.strip(): doc.add_paragraph(f"●  {it.strip()}")
 
     doc.add_paragraph("")
-
-    # Detail Step
     pattern = r"(Step\s*\d+\s*:.*)"
     parts = re.split(pattern, steps_text, flags=re.I)
     steps = []
@@ -136,6 +173,11 @@ def create_wi_landscape(template_file, doc_no, product, temp_no, rev, proc, part
             if b:
                 clean = re.sub(r'^[•\-\*]\s*', '', b)
                 doc.add_paragraph(f"●  {clean}")
+
+    # === JIKA APPROVAL DI BAWAH ===
+    if approval_di_bawah:
+        doc.add_page_break()
+        add_approval_history(doc)
 
     return doc
 
