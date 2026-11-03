@@ -9,7 +9,7 @@ import io, re, os, difflib
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="Quality AI PRO - 5 Modules", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Quality AI PRO - 6 Modules", page_icon="📊", layout="wide")
 
 # ================= HELPER WI GENERATOR =================
 def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, steps_text):
@@ -265,17 +265,6 @@ def trial_report_tab():
             else:
                 df_result = pd.read_excel(data_file)
             st.dataframe(df_result, use_container_width=True)
-            if "Result" in df_result.columns or "Status" in df_result.columns:
-                col_name = "Result" if "Result" in df_result.columns else "Status"
-                ok_count = len(df_result[df_result[col_name].astype(str).str.contains("OK|PASS|Good", case=False, na=False)])
-                ng_count = len(df_result) - ok_count
-                yield_pct = ok_count / len(df_result) * 100 if len(df_result) > 0 else 0
-                cA, cB, cC = st.columns(3)
-                cA.metric("Total", len(df_result))
-                cB.metric("OK", ok_count)
-                cC.metric("Yield", f"{yield_pct:.1f}%")
-                fig = px.pie(values=[ok_count, ng_count], names=["OK", "NG"], title="Hasil Trial")
-                st.plotly_chart(fig, use_container_width=True)
     with tab_manual:
         manual_df = st.data_editor(pd.DataFrame([
             {"Sample": "S001", "Parameter": "Visual", "Result": "OK", "Notes": ""},
@@ -284,13 +273,12 @@ def trial_report_tab():
         ]), num_rows="dynamic", use_container_width=True, key="trial_manual")
         if df_result is None:
             df_result = manual_df
-    analysis = st.text_area("🧠 Analisa", "Dari hasil trial, defect utama adalah Flash (X%). Penyebab kemungkinan...", height=130, key="tr_analysis")
-    conclusion = st.text_area("✅ Conclusion & Recommendation", "Trial PASS dengan yield X%. Rekomendasi: Lanjutkan ke mass production / Perlu perbaikan...", height=100, key="tr_conc")
+    analysis = st.text_area("🧠 Analisa", "Dari hasil trial, defect utama adalah Flash (X%).", height=130, key="tr_analysis")
+    conclusion = st.text_area("✅ Conclusion", "Trial PASS dengan yield X%. Rekomendasi: Lanjutkan ke mass production", height=100, key="tr_conc")
     if st.button("📄 Generate Trial Report FINAL", type="primary", use_container_width=True, key="gen_trial"):
         doc = Document()
-        title = doc.add_heading(f"TRIAL REPORT", 1)
-        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        doc.add_paragraph(f"Trial No: {trial_no} | Product: {product} | Date: {trial_date} | PIC: {pic}").alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_heading(f"TRIAL REPORT", 1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph(f"Trial No: {trial_no} | Product: {product} | Date: {trial_date} | PIC: {pic}")
         doc.add_heading("1. Objective", 2)
         doc.add_paragraph(objective)
         doc.add_heading("2. Parameters", 2)
@@ -309,89 +297,217 @@ def trial_report_tab():
                     rw[i].text = str(val)
         doc.add_heading("5. Analysis", 2)
         doc.add_paragraph(analysis)
-        doc.add_heading("6. Conclusion & Recommendation", 2)
+        doc.add_heading("6. Conclusion", 2)
         doc.add_paragraph(conclusion)
-        doc.add_heading("7. Approval", 2)
+        bio = io.BytesIO()
+        doc.save(bio)
+        bio.seek(0)
+        st.download_button("📥 Download Trial Report", data=bio, file_name=f"{trial_no}_Trial_Report.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+
+def catalog_reject_tab():
+    st.subheader("📚 Catalog Reject Injection")
+    os.makedirs("catalog_images", exist_ok=True)
+    catalog = [
+        {"name": "SHORT SHOT", "alias": "Isi Tidak Penuh", "level": "CRITICAL", "desc": "Part tidak terisi penuh, ujung tip kosong/patah.", "cause": ["Material kurang", "Suhu barrel rendah", "Injection pressure rendah", "Venting buntu"], "action": ["Cek hopper", "Naikkan temp +10-15C", "Naikkan pressure 5-10%", "Bersihkan venting"], "criteria": "REJECT 100%"},
+        {"name": "FLASH", "alias": "Selaput di parting line", "level": "MAJOR", "desc": "Kelebihan material tipis di sekeliling part.", "cause": ["Clamping kurang", "Mold aus", "Pressure tinggi"], "action": ["Naikkan clamping", "Repair mold", "Turunkan pressure"], "criteria": "REJECT jika >0.1mm"},
+        {"name": "BLACK DOT", "alias": "Titik hitam", "level": "CRITICAL", "desc": "Titik hitam kecil di part clear - defect LV Tips paling sering.", "cause": ["Material kontaminasi", "Barrel kotor", "Purging kurang"], "action": ["Purging 10 shots", "Bersihkan hopper", "Ganti batch"], "criteria": "REJECT 100% LED 6W"},
+        {"name": "BURN MARK", "alias": "Gosong", "level": "CRITICAL", "desc": "Warna coklat/hitam terbakar karena gas terjebak.", "cause": ["Venting buntu", "Speed tinggi", "Suhu tinggi"], "action": ["STOP - Panggil teknisi", "Bersihkan venting", "Turunkan speed 20%"], "criteria": "REJECT 100%"},
+        {"name": "SINK MARK", "alias": "Cekungan", "level": "MINOR-MAJOR", "desc": "Permukaan cekung seperti kawah di area tebal.", "cause": ["Holding kurang", "Cooling kurang"], "action": ["Naikkan holding", "Tambah cooling 2-3 detik"], "criteria": "REJECT jika di sealing"},
+    ]
+    search = st.text_input("🔍 Cari defect", "", key="cat_search")
+    for item in catalog:
+        if search and search.lower() not in item["name"].lower():
+            continue
+        with st.expander(f"🔴 {item['name']} - {item['alias']} [{item['level']}]"):
+            c1, c2 = st.columns([1, 1.5])
+            with c1:
+                st.info(f"Contoh: {item['name']}\nUpload foto asli ke catalog_images/{item['name']}.jpg")
+                st.error(f"Kriteria: {item['criteria']}")
+            with c2:
+                st.write(f"**Desc:** {item['desc']}")
+                st.write("**Cause:** " + ", ".join(item['cause']))
+                st.write("**Action:**")
+                for a in item["action"]:
+                    st.write(f"● {a}")
+
+def dmaic_tab():
+    st.subheader("🌀 DMAIC Generator - Injection Issue")
+    st.caption("DMAIC untuk issue injection - nyambung dari Catalog Reject. Isi form, langsung jadi laporan .docx")
+    
+    # D - DEFINE
+    st.markdown("### 1️⃣ D - DEFINE")
+    c1, c2 = st.columns(2)
+    with c1:
+        dmaic_no = st.text_input("DMAIC No", f"DMAIC-{datetime.now().strftime('%Y%m%d')}-001", key="dmaic_no")
+        product = st.text_input("Product / Part", "LV Tips NT8", key="dmaic_prod")
+        issue_type = st.selectbox("Jenis Defect (dari Catalog)", ["SHORT SHOT", "FLASH / BURR", "BLACK DOT / CONTAMINATION", "BURN MARK", "SINK MARK", "WELD LINE", "SPLAY", "WARPAGE", "Other"], key="dmaic_issue")
+        other_issue = st.text_input("Jika Other, tulis issue", "", key="dmaic_other")
+        problem = st.text_area("Problem Statement", f"Terjadi peningkatan defect {issue_type} di line injection LV Tips. Defect rate X% di atas target Y%. Berdampak ke yield dan customer complaint.", height=100, key="dmaic_prob")
+    with c2:
+        dmaic_date = st.date_input("Date", datetime.now(), key="dmaic_date")
+        team = st.text_input("Team / PIC", "Quality, Engineering, Production, Mold Maintenance", key="dmaic_team")
+        goal = st.text_area("Goal / Target", "Menurunkan defect rate dari X% menjadi <0.5% dalam 2 minggu.\nMeningkatkan yield dari 92% ke 98%", height=80, key="dmaic_goal")
+        scope = st.text_area("Scope", "Line: Injection Machine #3\nMold: Mold LV Tips 32 cavity\nMaterial: PP Clear batch A\nPeriode: 1-15 Nov 2024", height=100, key="dmaic_scope")
+    
+    final_issue = other_issue if other_issue else issue_type
+    
+    # M - MEASURE
+    st.divider()
+    st.markdown("### 2️⃣ M - MEASURE")
+    st.write("Upload data defect atau input manual untuk Pareto Chart")
+    m_col1, m_col2 = st.columns([1,1])
+    with m_col1:
+        measure_file = st.file_uploader("Upload data defect (.csv / .xlsx) - kolom: DefectType, Qty", type=["csv","xlsx"], key="dmaic_measure_file")
+        if measure_file:
+            if measure_file.name.endswith(".csv"):
+                df_m = pd.read_csv(measure_file)
+            else:
+                df_m = pd.read_excel(measure_file)
+        else:
+            df_m = st.data_editor(pd.DataFrame([
+                {"DefectType": "BLACK DOT", "Qty": 45},
+                {"DefectType": "FLASH", "Qty": 30},
+                {"DefectType": "SHORT SHOT", "Qty": 15},
+                {"DefectType": "SINK MARK", "Qty": 10},
+            ]), num_rows="dynamic", use_container_width=True, key="dmaic_measure_edit")
+        
+        # Metrics
+        total_defect = df_m["Qty"].sum() if "Qty" in df_m.columns else 0
+        st.metric("Total Defect", total_defect)
+    
+    with m_col2:
+        if not df_m.empty and "DefectType" in df_m.columns and "Qty" in df_m.columns:
+            fig = px.bar(df_m.sort_values("Qty", ascending=False), x="DefectType", y="Qty", title="Pareto Defect - Measure Phase", color="Qty", color_continuous_scale="Reds")
+            st.plotly_chart(fig, use_container_width=True)
+        baseline = st.text_input("Baseline Yield / Defect Rate saat ini", "Defect 5.2%, Yield 94.8%", key="dmaic_baseline")
+        measurement_method = st.text_area("How we measure", "Visual inspection 100% under LED 6W 580LM, jarak 30cm, tatakan putih. Data diambil per shift dari check sheet QC.", height=80, key="dmaic_meas_method")
+    
+    # A - ANALYZE
+    st.divider()
+    st.markdown("### 3️⃣ A - ANALYZE (Fishbone + 5 Why)")
+    a1, a2 = st.columns(2)
+    with a1:
+        st.write("**Fishbone / Ishikawa - 5M**")
+        man = st.text_area("Man", "Operator baru, training kurang, fatigue", height=60, key="fish_man")
+        machine = st.text_area("Machine", "Nozzle buntu, barrel temp tidak stabil, clamping aus", height=60, key="fish_machine")
+        material = st.text_area("Material", "Material kontaminasi, moisture tinggi, batch beda", height=60, key="fish_mat")
+        method = st.text_area("Method", "Purging kurang, parameter tidak standar, venting tidak dibersihkan", height=60, key="fish_method")
+        mold = st.text_area("Mold / Measurement", "Venting buntu, mold aus, gate kecil, measurement tidak konsisten", height=60, key="fish_mold")
+    with a2:
+        st.write("**5 Why Analysis**")
+        why1 = st.text_input("Why 1", f"Kenapa terjadi {final_issue}?", key="why1")
+        ans1 = st.text_input("Answer 1", "Karena material tidak mengisi penuh / ada kontaminasi", key="ans1")
+        why2 = st.text_input("Why 2", "Kenapa bisa begitu?", key="why2")
+        ans2 = st.text_input("Answer 2", "Karena nozzle buntu / hopper kotor", key="ans2")
+        why3 = st.text_input("Why 3", "Kenapa bisa begitu?", key="why3")
+        ans3 = st.text_input("Answer 3", "Karena purging kurang & maintenance tidak terjadwal", key="ans3")
+        why4 = st.text_input("Why 4", "Kenapa bisa begitu?", key="why4")
+        ans4 = st.text_input("Answer 4", "Karena tidak ada checklist purging & PM mold", key="ans4")
+        why5 = st.text_input("Why 5 - ROOT CAUSE", "Root Cause", key="why5")
+        ans5 = st.text_area("Root Cause", "Tidak ada standard purging dan PM venting mold tidak terjadwal, menyebabkan kontaminasi dan gas trap", height=60, key="ans5")
+    
+    # I - IMPROVE
+    st.divider()
+    st.markdown("### 4️⃣ I - IMPROVE")
+    i1, i2 = st.columns(2)
+    with i1:
+        improve_action = st.data_editor(pd.DataFrame([
+            {"No": 1, "Action": "Purging standard 10 shots tiap ganti batch", "PIC": "Production", "Due": "Immediate", "Status": "Done"},
+            {"No": 2, "Action": "Bersihkan venting mold & tambah venting", "PIC": "Mold Maint", "Due": "2 hari", "Status": "On Progress"},
+            {"No": 3, "Action": "Buat checklist drying material <0.02%", "PIC": "Quality", "Due": "3 hari", "Status": "Plan"},
+            {"No": 4, "Action": "Training operator parameter standard", "PIC": "Engineering", "Due": "1 minggu", "Status": "Plan"},
+        ]), num_rows="dynamic", use_container_width=True, key="improve_table")
+    with i2:
+        improve_result = st.text_area("Hasil Improvement / Trial Result", "Setelah implementasi:\n- Defect BLACK DOT turun dari 45 ke 5 (89%)\n- Yield naik dari 94.8% ke 98.2%\n- Trial 1000 pcs: OK 982, NG 18", height=150, key="improve_result")
+        cost = st.text_input("Cost / Benefit", "Cost: Purging material 2kg, Benefit: Saving reject Rp 5jt/minggu", key="improve_cost")
+    
+    # C - CONTROL
+    st.divider()
+    st.markdown("### 5️⃣ C - CONTROL")
+    c_c1, c_c2 = st.columns(2)
+    with c_c1:
+        control_plan = st.text_area("Control Plan", "1. Checklist purging wajib tiap ganti material - diisi operator & checked SPV\n2. PM venting mold tiap 2 minggu\n3. Monitoring defect di hourly board\n4. Alert jika defect >1% per shift", height=120, key="control_plan")
+        monitoring = st.text_area("Monitoring / Dashboard", "Buat dashboard harian defect injection di line. Review mingguan di Quality Meeting. Jika defect naik >1%, trigger DMAIC lagi.", height=80, key="control_monitor")
+    with c_c2:
+        standardization = st.text_area("Standardization", "Update WI: WI-INJ-003 Rev 2 - Tambah langkah purging 10 shots\nUpdate Checklist: Form drying & purging\nUpdate PM: Schedule PM mold", height=120, key="control_std")
+        lesson = st.text_area("Lesson Learned", "Pentingnya purging standard & PM venting berkala untuk mencegah kontaminasi di LV Tips clear product.", height=80, key="control_lesson")
+    
+    # GENERATE REPORT
+    st.divider()
+    if st.button("📄 Generate DMAIC Report FINAL", type="primary", use_container_width=True):
+        doc = Document()
+        h = doc.add_heading(f"DMAIC REPORT - {final_issue}", 1)
+        h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph(f"DMAIC No: {dmaic_no} | Product: {product} | Date: {dmaic_date} | Team: {team}").alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        doc.add_heading("1. DEFINE", 2)
+        doc.add_paragraph(f"Problem Statement: {problem}")
+        doc.add_paragraph(f"Goal: {goal}")
+        doc.add_paragraph(f"Scope: {scope}")
+        doc.add_paragraph(f"Baseline: {baseline}")
+        
+        doc.add_heading("2. MEASURE", 2)
+        doc.add_paragraph(f"Measurement Method: {measurement_method}")
+        if not df_m.empty:
+            t = doc.add_table(rows=1, cols=len(df_m.columns))
+            t.style = 'Table Grid'
+            for i, col in enumerate(df_m.columns):
+                t.cell(0,i).text = str(col)
+            for _, row in df_m.iterrows():
+                rw = t.add_row().cells
+                for i, val in enumerate(row):
+                    rw[i].text = str(val)
+            doc.add_paragraph(f"Total Defect: {total_defect}")
+        
+        doc.add_heading("3. ANALYZE - Fishbone 5M", 2)
+        doc.add_paragraph(f"Man: {man}")
+        doc.add_paragraph(f"Machine: {machine}")
+        doc.add_paragraph(f"Material: {material}")
+        doc.add_paragraph(f"Method: {method}")
+        doc.add_paragraph(f"Mold/Measurement: {mold}")
+        doc.add_heading("3b. 5 Why - Root Cause", 2)
+        doc.add_paragraph(f"Why1: {why1} - {ans1}")
+        doc.add_paragraph(f"Why2: {why2} - {ans2}")
+        doc.add_paragraph(f"Why3: {why3} - {ans3}")
+        doc.add_paragraph(f"Why4: {why4} - {ans4}")
+        doc.add_paragraph(f"ROOT CAUSE (Why5): {why5} - {ans5}")
+        
+        doc.add_heading("4. IMPROVE", 2)
+        doc.add_paragraph("Action Plan:")
+        if not improve_action.empty:
+            t = doc.add_table(rows=1, cols=len(improve_action.columns))
+            t.style = 'Table Grid'
+            for i, col in enumerate(improve_action.columns):
+                t.cell(0,i).text = str(col)
+            for _, row in improve_action.iterrows():
+                rw = t.add_row().cells
+                for i, val in enumerate(row):
+                    rw[i].text = str(val)
+        doc.add_paragraph(f"Result: {improve_result}")
+        doc.add_paragraph(f"Cost/Benefit: {cost}")
+        
+        doc.add_heading("5. CONTROL", 2)
+        doc.add_paragraph(f"Control Plan: {control_plan}")
+        doc.add_paragraph(f"Monitoring: {monitoring}")
+        doc.add_paragraph(f"Standardization: {standardization}")
+        doc.add_paragraph(f"Lesson Learned: {lesson}")
+        
+        doc.add_heading("Approval", 2)
         appr = doc.add_table(rows=2, cols=3)
         appr.style = 'Table Grid'
         appr.cell(0,0).text = "Prepared by"
         appr.cell(0,1).text = "Checked by"
         appr.cell(0,2).text = "Approved by"
-        appr.cell(1,0).text = pic
+        
         bio = io.BytesIO()
         doc.save(bio)
         bio.seek(0)
-        st.success(f"Trial Report {trial_no} jadi!")
-        st.download_button("📥 Download Trial Report", data=bio, file_name=f"{trial_no}_Trial_Report.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
-
-def catalog_reject_tab():
-    st.subheader("📚 Catalog Reject Injection")
-    st.info("Katalog ini berisi defect injection umum untuk LV Tips & general injection. Klik untuk detail + action. Upload foto asli kamu untuk menggantikan placeholder.")
-    
-    # Buat folder catalog jika belum ada
-    os.makedirs("catalog_images", exist_ok=True)
-    
-    catalog = [
-        {"name": "SHORT SHOT", "alias": "Isi Tidak Penuh / Tip Kosong", "level": "CRITICAL", "desc": "Part tidak terisi penuh, ujung tip kosong/patah. Sering terjadi di LV Tips clear.", "cause": ["Material kurang", "Suhu barrel rendah", "Injection pressure rendah", "Mold venting buntu", "Nozzle buntu"], "action": ["Cek hopper & material feed", "Naikkan barrel temp +10-15C", "Naikkan injection pressure 5-10%", "Bersihkan venting mold", "Purging nozzle"], "criteria": "REJECT 100% - Sort lot"},
-        {"name": "FLASH / BURR", "alias": "Selaput tipis di parting line", "level": "MAJOR", "desc": "Kelebihan material tipis di sekeliling part, bahaya masuk ke produk.", "cause": ["Clamping force kurang", "Mold aus/rusak", "Injection pressure terlalu tinggi", "Mold kotor"], "action": ["Naikkan clamping force", "Cek kondisi mold - repair jika aus", "Turunkan injection pressure/speed", "Bersihkan parting line", "Trial 5 shots"], "criteria": "REJECT jika flash >0.1mm"},
-        {"name": "SINK MARK", "alias": "Cekungan / Lekukan permukaan", "level": "MINOR-MAJOR", "desc": "Permukaan ada cekungan seperti kawah di area tebal.", "cause": ["Holding pressure kurang", "Cooling time kurang", "Shrinkage tinggi", "Gate kecil"], "action": ["Naikkan holding pressure & time", "Tambah cooling time 2-3 detik", "Turunkan barrel temp", "Cek gate design"], "criteria": "REJECT jika di sealing area"},
-        {"name": "BURN MARK", "alias": "Gosong / Hitam kecoklatan", "level": "CRITICAL", "desc": "Warna coklat/hitam terbakar karena gas terjebak (diesel effect).", "cause": ["Venting buntu - gas trap", "Injection speed terlalu tinggi", "Suhu terlalu tinggi"], "action": ["STOP - Panggil teknisi", "Bersihkan/tambah venting", "Turunkan injection speed 20%", "Turunkan suhu barrel"], "criteria": "REJECT 100% Kontaminasi"},
-        {"name": "WELD LINE", "alias": "Garis sambungan aliran", "level": "MAJOR", "desc": "Garis terlihat di part, kekuatan lemah.", "cause": ["Suhu rendah", "Speed rendah", "Mold dingin"], "action": ["Naikkan barrel & mold temp", "Naikkan injection speed", "Cek gate position"], "criteria": "REJECT jika di critical area"},
-        {"name": "BLACK DOT / CONTAMINATION", "alias": "Titik hitam", "level": "CRITICAL untuk LV Tips", "desc": "Titik hitam kecil di part clear - defect paling sering di LV Tips.", "cause": ["Material kontaminasi", "Barrel kotor/degradasi", "Purging kurang", "Hopper kotor"], "action": ["Purging 10 shots", "Bersihkan hopper & dryer", "Ganti batch material", "Cek screw & barrel"], "criteria": "REJECT 100% visual under LED 6W"},
-        {"name": "SPLAY / SILVER STREAK", "alias": "Garis perak / Moisture", "level": "MAJOR", "desc": "Garis perak di permukaan karena moisture.", "cause": ["Material basah", "Drying kurang", "Suhu terlalu tinggi"], "action": ["Cek dryer - pastikan <0.02% moisture", "Tambah drying time 2 jam", "Turunkan nozzle temp", "Cek material storage"], "criteria": "REJECT jika terlihat jelas"},
-        {"name": "WARPAGE", "alias": "Bengkok / Tidak rata", "level": "MAJOR", "desc": "Part bengkok / tidak rata setelah eject.", "cause": ["Cooling tidak merata", "Ejector tidak balance", "Shrinkage tidak merata"], "action": ["Cek cooling channel", "Balance cooling time", "Cek ejector pin", "Turunkan mold temp"], "criteria": "REJECT jika melebihi tolerance"},
-    ]
-    
-    search = st.text_input("🔍 Cari defect", "", key="cat_search")
-    level_filter = st.selectbox("Filter Level", ["ALL", "CRITICAL", "MAJOR", "MINOR-MAJOR"], key="cat_filter")
-    
-    for item in catalog:
-        if search and search.lower() not in item["name"].lower() and search.lower() not in item["alias"].lower():
-            continue
-        if level_filter != "ALL" and level_filter not in item["level"]:
-            continue
-            
-        with st.expander(f"🔴 {item['name']} - {item['alias']} [{item['level']}]", expanded=False):
-            c1, c2 = st.columns([1, 1.5])
-            with c1:
-                # Cek apakah ada foto asli di catalog_images
-                custom_path = f"catalog_images/{item['name'].replace(' ', '_').replace('/', '_')}.jpg"
-                if os.path.exists(custom_path):
-                    st.image(custom_path, caption=f"Foto Asli: {item['name']}", use_container_width=True)
-                else:
-                    st.info(f"📸 Contoh: {item['name']}\n\nUpload foto asli kamu dengan nama:\n{custom_path}\n\nUntuk mengganti placeholder ini.")
-                    # Tampilkan upload di dalam expander
-                    up = st.file_uploader(f"Upload foto {item['name']}", type=["jpg","png","jpeg"], key=f"up_{item['name']}")
-                    if up:
-                        with open(custom_path, "wb") as f:
-                            f.write(up.getbuffer())
-                        st.success("Foto tersimpan! Refresh halaman")
-                        st.image(custom_path, use_container_width=True)
-                st.error(f"Kriteria: {item['criteria']}")
-            with c2:
-                st.write(f"**Deskripsi:** {item['desc']}")
-                st.write("**⚠️ Penyebab Umum:**")
-                for cause in item["cause"]:
-                    st.write(f"- {cause}")
-                st.write("**✅ Action / Rekomendasi:**")
-                for act in item["action"]:
-                    st.write(f"● {act}")
-                st.warning("Action QC: Sort 100% lot yang sama, simpan sample NG untuk review Engineering & Mold")
-    
-    st.divider()
-    st.subheader("📤 Upload Foto Reject Asli Massal")
-    st.caption("Upload banyak foto sekaligus, nanti masuk ke catalog_images")
-    multi = st.file_uploader("Upload foto-foto reject (bisa banyak)", type=["jpg","png","jpeg"], accept_multiple_files=True, key="multi_upload")
-    if multi:
-        for f in multi:
-            path = f"catalog_images/{f.name}"
-            with open(path, "wb") as out:
-                out.write(f.getbuffer())
-        st.success(f"{len(multi)} foto tersimpan di catalog_images/")
+        st.success(f"DMAIC {dmaic_no} jadi!")
+        st.download_button("📥 Download DMAIC Report", data=bio, file_name=f"{dmaic_no}_{final_issue}_DMAIC.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
 # ================= MAIN =================
-st.title("📊 Quality AI PRO - 5 Modules")
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 MSA", "📄 WI Generator", "🖼️ Screenshot Compare", "🧪 Trial Report", "📚 Catalog Reject"])
+st.title("📊 Quality AI PRO - 6 Modules")
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 MSA", "📄 WI Generator", "🖼️ Screenshot Compare", "🧪 Trial Report", "📚 Catalog Reject", "🌀 DMAIC"])
 with tab1:
     msa_tab()
 with tab2:
@@ -402,3 +518,5 @@ with tab4:
     trial_report_tab()
 with tab5:
     catalog_reject_tab()
+with tab6:
+    dmaic_tab()
