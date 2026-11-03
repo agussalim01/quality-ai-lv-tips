@@ -9,7 +9,7 @@ import io, re, os, difflib
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="Quality AI PRO", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Quality AI PRO - 4 Modules", page_icon="📊", layout="wide")
 
 # ================= HELPER WI GENERATOR =================
 def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, steps_text):
@@ -94,7 +94,7 @@ def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, 
         pass
     return doc
 
-# ================= HELPER COMPARATOR SCREENSHOT =================
+# ================= HELPER COMPARATOR =================
 def extract_all(docx_file):
     doc = Document(docx_file)
     items = []
@@ -163,7 +163,7 @@ def create_side_screenshot(old_list, new_list, output_path="/tmp/side_by_side.pn
 
 # ================= TABS =================
 def comparator_tab():
-    st.subheader("🖼️ Screenshot Kiri Kanan - WI Lama vs Baru")
+    st.subheader("🖼️ Screenshot Kiri Kanan")
     c1, c2 = st.columns(2)
     with c1:
         old_file = st.file_uploader("📂 WI LAMA", type=["docx"], key="old_wi")
@@ -176,7 +176,7 @@ def comparator_tab():
         st.metric("Kemiripan", f"{sim:.1f}%")
         img_path = create_side_screenshot(old_list, new_list)
         st.divider()
-        st.image(img_path, caption="Kiri = Lama | Kanan = Baru (Merah = ddff / baru)", use_container_width=True)
+        st.image(img_path, caption="Kiri = Lama | Kanan = Baru", use_container_width=True)
         with open(img_path, "rb") as f:
             st.download_button("📥 Download Screenshot PNG", data=f, file_name="WI_Kiri_Kanan.png", mime="image/png", type="primary", use_container_width=True)
     else:
@@ -196,18 +196,16 @@ def wi_tab():
     else:
         st.warning("Template belum ada, upload manual:")
         template_file = st.file_uploader("Upload Template (.docx)", type=["docx"], key="wi_template")
-    
     c1, c2 = st.columns(2)
     with c1:
-        doc_no = st.text_input("Document No", "WIN-13-005-0015")
-        product = st.text_input("Product", "NT8")
-        temp_no = st.text_input("Temp Number", "TMP-11-001-0002 rev.1")
-        rev = st.text_input("Rev", "0")
-        proc = st.text_input("Process Desc", "QC 100% Visual Inspection LV Tips")
+        doc_no = st.text_input("Document No", "WIN-13-005-0015", key="wi_docno")
+        product = st.text_input("Product", "NT8", key="wi_prod")
+        temp_no = st.text_input("Temp Number", "TMP-11-001-0002 rev.1", key="wi_temp")
+        rev = st.text_input("Rev", "0", key="wi_rev")
+        proc = st.text_input("Process Desc", "QC 100% Visual Inspection LV Tips", key="wi_proc")
     with c2:
-        part_req = st.text_area("Part Required", "1 batch LV Tips after cutting", height=80)
-        tools_req = st.text_area("Tools Required", "Lampu LED 6 watt 580 LM\nTatakan LV tips\nPinset\nIonizer", height=120)
-    
+        part_req = st.text_area("Part Required", "1 batch LV Tips after cutting", height=80, key="wi_part")
+        tools_req = st.text_area("Tools Required", "Lampu LED 6 watt 580 LM\nTatakan LV tips\nPinset\nIonizer", height=120, key="wi_tools")
     st.write("**Time Table**")
     time_df = st.data_editor(pd.DataFrame([
         {"step": "Step 1 :  Susun Tips", "time": 10},
@@ -218,9 +216,7 @@ def wi_tab():
         {"step": "Step 6 : 2nd Visual Check", "time": 5},
         {"step": "Step 7 : Ionizer", "time": 5}
     ]), num_rows="dynamic", use_container_width=True, key="time_editor")
-    
-    raw = st.text_area("Detail Langkah Kerja", "Step 1 :  Susun Tips\nSusun LV tips di atas tatakan\n\nStep 2 :  Check visual defect\nCek dengan lampu LED 30cm", height=200)
-    
+    raw = st.text_area("Detail Langkah Kerja", "Step 1 :  Susun Tips\nSusun LV tips di atas tatakan\n\nStep 2 :  Check visual defect\nCek dengan lampu LED 30cm", height=200, key="wi_raw")
     if st.button("✨ Generate WI FINAL", type="primary", use_container_width=True):
         if not template_file:
             st.error("Template tidak ditemukan! Upload TMP-11-001-0002")
@@ -246,11 +242,110 @@ def msa_tab():
         fig = px.histogram(df, x="Measurement", color="Operator", title="MSA Distribution")
         st.plotly_chart(fig, use_container_width=True)
 
-st.title("📊 Quality AI PRO")
-tab1, tab2, tab3 = st.tabs(["📊 MSA", "📄 WI Generator", "🖼️ Screenshot Kiri Kanan"])
+def trial_report_tab():
+    st.subheader("🧪 Trial Report - Standard + Analisa Otomatis")
+    c1, c2 = st.columns(2)
+    with c1:
+        trial_no = st.text_input("Trial No", "TR-2024-001", key="tr_no")
+        product = st.text_input("Product", "NT8", key="tr_prod")
+        trial_date = st.date_input("Trial Date", datetime.now(), key="tr_date")
+        pic = st.text_input("PIC / Engineer", "", key="tr_pic")
+        objective = st.text_area("Objective / Tujuan", "Validasi proses baru untuk mengurangi defect visual", height=100, key="tr_obj")
+    with c2:
+        parameters = st.text_area("Parameter Trial", "1. Suhu: 25C\n2. Speed: 100rpm\n3. Material: LV Tips batch A\n4. Lampu: LED 6W", height=100, key="tr_param")
+        method = st.text_area("Method", "1. Siapkan 100 pcs sample\n2. Running QC visual\n3. Catat OK/NG\n4. Analisa defect", height=100, key="tr_method")
+    
+    st.divider()
+    st.write("**📊 Hasil Trial**")
+    tab_upload, tab_manual = st.tabs(["📤 Upload Excel/CSV", "✏️ Input Manual"])
+    df_result = None
+    
+    with tab_upload:
+        data_file = st.file_uploader("Upload hasil trial", type=["csv", "xlsx"], key="trial_data")
+        if data_file:
+            if data_file.name.endswith(".csv"):
+                df_result = pd.read_csv(data_file)
+            else:
+                df_result = pd.read_excel(data_file)
+            st.dataframe(df_result, use_container_width=True)
+            if "Result" in df_result.columns or "Status" in df_result.columns:
+                col_name = "Result" if "Result" in df_result.columns else "Status"
+                ok_count = len(df_result[df_result[col_name].astype(str).str.contains("OK|PASS|Good", case=False, na=False)])
+                ng_count = len(df_result) - ok_count
+                yield_pct = ok_count / len(df_result) * 100 if len(df_result) > 0 else 0
+                cA, cB, cC = st.columns(3)
+                cA.metric("Total", len(df_result))
+                cB.metric("OK", ok_count)
+                cC.metric("Yield", f"{yield_pct:.1f}%")
+                fig = px.pie(values=[ok_count, ng_count], names=["OK", "NG"], title="Hasil Trial", color_discrete_sequence=["#2e7d32", "#c62828"])
+                st.plotly_chart(fig, use_container_width=True)
+    
+    with tab_manual:
+        manual_df = st.data_editor(pd.DataFrame([
+            {"Sample": "S001", "Parameter": "Visual", "Result": "OK", "Notes": ""},
+            {"Sample": "S002", "Parameter": "Visual", "Result": "NG - Flash", "Notes": "Flash di tip"},
+            {"Sample": "S003", "Parameter": "Visual", "Result": "OK", "Notes": ""},
+        ]), num_rows="dynamic", use_container_width=True, key="trial_manual")
+        if df_result is None:
+            df_result = manual_df
+    
+    analysis = st.text_area("🧠 Analisa", "Dari hasil trial, defect utama adalah Flash (X%). Penyebab kemungkinan...", height=130, key="tr_analysis")
+    conclusion = st.text_area("✅ Conclusion & Recommendation", "Trial PASS dengan yield X%. Rekomendasi: Lanjutkan ke mass production / Perlu perbaikan...", height=100, key="tr_conc")
+    
+    if st.button("📄 Generate Trial Report FINAL", type="primary", use_container_width=True, key="gen_trial"):
+        doc = Document()
+        title = doc.add_heading(f"TRIAL REPORT", 1)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph(f"Trial No: {trial_no} | Product: {product} | Date: {trial_date} | PIC: {pic}").alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        doc.add_heading("1. Objective", 2)
+        doc.add_paragraph(objective)
+        doc.add_heading("2. Parameters", 2)
+        doc.add_paragraph(parameters)
+        doc.add_heading("3. Method", 2)
+        doc.add_paragraph(method)
+        doc.add_heading("4. Results", 2)
+        if df_result is not None and not df_result.empty:
+            t = doc.add_table(rows=1, cols=len(df_result.columns))
+            t.style = 'Table Grid'
+            for i, col in enumerate(df_result.columns):
+                t.cell(0,i).text = str(col)
+            for _, row in df_result.iterrows():
+                rw = t.add_row().cells
+                for i, val in enumerate(row):
+                    rw[i].text = str(val)
+            # Summary
+            if "Result" in df_result.columns:
+                ok = len(df_result[df_result["Result"].astype(str).str.contains("OK|PASS", case=False, na=False)])
+                doc.add_paragraph(f"Total: {len(df_result)}, OK: {ok}, Yield: {ok/len(df_result)*100:.1f}%")
+        doc.add_heading("5. Analysis", 2)
+        doc.add_paragraph(analysis)
+        doc.add_heading("6. Conclusion & Recommendation", 2)
+        doc.add_paragraph(conclusion)
+        doc.add_heading("7. Approval", 2)
+        appr = doc.add_table(rows=2, cols=3)
+        appr.style = 'Table Grid'
+        appr.cell(0,0).text = "Prepared by"
+        appr.cell(0,1).text = "Checked by"
+        appr.cell(0,2).text = "Approved by"
+        appr.cell(1,0).text = pic
+        appr.cell(1,1).text = ""
+        appr.cell(1,2).text = ""
+        
+        bio = io.BytesIO()
+        doc.save(bio)
+        bio.seek(0)
+        st.success(f"Tial Report {trial_no} jadi!")
+        st.download_button("📥 Download Trial Report", data=bio, file_name=f"{trial_no}_Trial_Report.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+
+# ================= MAIN =================
+st.title("📊 Quality AI PRO - 4 Modules")
+tab1, tab2, tab3, tab4 = st.tabs(["📊 MSA", "📄 WI Generator", "🖼️ Screenshot Compare", "🧪 Trial Report"])
 with tab1:
     msa_tab()
 with tab2:
     wi_tab()
 with tab3:
     comparator_tab()
+with tab4:
+    trial_report_tab()
