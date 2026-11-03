@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-st.set_page_config(page_title="Quality AI PRO - 6 Modules Auto Chart", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Quality AI PRO - 7 Modules", page_icon="📊", layout="wide")
 
 # ================= HELPER WI GENERATOR =================
 def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, steps_text):
@@ -230,7 +230,8 @@ def wi_tab():
         st.download_button("📥 Download WI FINAL", data=bio, file_name=f"{doc_no}_FINAL.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
 def msa_tab():
-    st.subheader("📊 MSA Dashboard")
+    st.subheader("📊 MSA Variabel - Untuk Alat Ukur Angka")
+    st.caption("Untuk caliper, timbangan, dll. Kalau visual OK/NG pakai tab AAA Visual")
     uploaded = st.file_uploader("Upload Data MSA (.csv)", type=["csv"], key="msa_upload")
     if uploaded:
         df = pd.read_csv(uploaded)
@@ -242,6 +243,109 @@ def msa_tab():
     with c2:
         fig = px.histogram(df, x="Measurement", color="Operator", title="MSA Distribution")
         st.plotly_chart(fig, use_container_width=True)
+
+def aaa_visual_tab():
+    st.subheader("👁️ AAA - Attribute Agreement Analysis - Visual Inspection")
+    st.caption("Khusus QC Visual LV Tips - Cek kesepakatan antar operator OK/NG")
+    
+    st.markdown("### 📋 Input Data AAA")
+    c1, c2 = st.columns([1,1])
+    with c1:
+        st.write("**Cara isi:** 1 part dinilai 2-3x oleh tiap operator, bandingkan dengan Standard (Expert)")
+        aaa_file = st.file_uploader("Upload data AAA (.csv/.xlsx) - Kolom: Part, Operator, Trial, Result(OK/NG), Standard", type=["csv","xlsx"], key="aaa_file")
+        if aaa_file:
+            if aaa_file.name.endswith(".csv"):
+                df_aaa = pd.read_csv(aaa_file)
+            else:
+                df_aaa = pd.read_excel(aaa_file)
+        else:
+            df_aaa = st.data_editor(pd.DataFrame([
+                {"Part": "P01", "Operator": "A", "Trial": 1, "Result": "NG", "Standard": "NG", "Defect": "BLACK DOT"},
+                {"Part": "P01", "Operator": "A", "Trial": 2, "Result": "NG", "Standard": "NG", "Defect": "BLACK DOT"},
+                {"Part": "P01", "Operator": "B", "Trial": 1, "Result": "NG", "Standard": "NG", "Defect": "BLACK DOT"},
+                {"Part": "P01", "Operator": "B", "Trial": 2, "Result": "OK", "Standard": "NG", "Defect": "BLACK DOT"},
+                {"Part": "P02", "Operator": "A", "Trial": 1, "Result": "OK", "Standard": "OK", "Defect": ""},
+                {"Part": "P02", "Operator": "A", "Trial": 2, "Result": "OK", "Standard": "OK", "Defect": ""},
+                {"Part": "P02", "Operator": "B", "Trial": 1, "Result": "OK", "Standard": "OK", "Defect": ""},
+                {"Part": "P03", "Operator": "A", "Trial": 1, "Result": "NG", "Standard": "NG", "Defect": "FLASH"},
+                {"Part": "P03", "Operator": "B", "Trial": 1, "Result": "NG", "Standard": "NG", "Defect": "FLASH"},
+                {"Part": "P04", "Operator": "A", "Trial": 1, "Result": "OK", "Standard": "NG", "Defect": "SINK MARK"},
+                {"Part": "P04", "Operator": "B", "Trial": 1, "Result": "OK", "Standard": "NG", "Defect": "SINK MARK"},
+            ]), num_rows="dynamic", use_container_width=True, key="aaa_edit", height=300)
+        
+        st.info("**Standard**: Hasil dari Expert / QA Leader. Result: OK/NG dari operator")
+    
+    with c2:
+        if not df_aaa.empty:
+            total = len(df_aaa)
+            repeat_scores = []
+            for (part, op), group in df_aaa.groupby(["Part", "Operator"]):
+                if len(group) > 1:
+                    repeat_scores.append(1 if group["Result"].nunique() == 1 else 0)
+            repeat_pct = (sum(repeat_scores) / len(repeat_scores) * 100) if repeat_scores else 0
+            accuracy = (df_aaa["Result"] == df_aaa["Standard"]).sum() / total * 100 if "Standard" in df_aaa.columns else 0
+            inter_agree = []
+            for part, group in df_aaa.groupby("Part"):
+                op_results = group.groupby("Operator")["Result"].agg(lambda x: x.mode().iloc[0] if not x.mode().empty else x.iloc[0])
+                inter_agree.append(1 if op_results.nunique() == 1 else 0)
+            inter_pct = (sum(inter_agree) / len(inter_agree) * 100) if inter_agree else 0
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Repeatability", f"{repeat_pct:.1f}%", help="Operator yang sama konsisten?")
+            m2.metric("Inter-Operator", f"{inter_pct:.1f}%", help="Antar operator sepakat?")
+            m3.metric("Accuracy vs Standard", f"{accuracy:.1f}%", help="Benar vs Expert?")
+            
+            if accuracy >= 90 and repeat_pct >= 90 and inter_pct >= 90:
+                st.success("✅ LULUS - Sistem visual OK, bisa lanjut WI")
+            elif accuracy >= 80:
+                st.warning("⚠️ MARGINAL - Perlu training ulang defect yang sering miss")
+            else:
+                st.error("❌ GAGAL - Sistem visual tidak valid, jangan pakai untuk mass production!")
+            
+            if "Defect" in df_aaa.columns:
+                df_miss = df_aaa[df_aaa["Result"] != df_aaa["Standard"]]
+                if not df_miss.empty:
+                    fig_miss = px.bar(df_miss.groupby("Defect").size().reset_index(name="Miss Count"), x="Defect", y="Miss Count", title="Defect Paling Sering Miss (Butuh Training)", color="Miss Count", color_continuous_scale="Reds")
+                    st.plotly_chart(fig_miss, use_container_width=True)
+    
+    st.divider()
+    st.markdown("### 📊 Detail Per Operator")
+    if not df_aaa.empty:
+        for op in df_aaa["Operator"].unique():
+            df_op = df_aaa[df_aaa["Operator"] == op]
+            acc = (df_op["Result"] == df_op["Standard"]).mean() * 100 if "Standard" in df_op.columns else 0
+            with st.expander(f"Operator {op} - Accuracy {acc:.1f}%"):
+                st.dataframe(df_op, use_container_width=True)
+                false_ok = df_op[(df_op["Result"]=="OK") & (df_op["Standard"]=="NG")]
+                false_ng = df_op[(df_op["Result"]=="NG") & (df_op["Standard"]=="OK")]
+                c_fo1, c_fo2 = st.columns(2)
+                c_fo1.error(f"False OK (Defect Lolos): {len(false_ok)} - BAHAYA!")
+                c_fo2.warning(f"False NG (Over Reject): {len(false_ng)}")
+                if not false_ok.empty:
+                    st.write("Part yang lolos padahal NG:", false_ok["Part"].tolist())
+    
+    st.divider()
+    if st.button("📄 Generate AAA Report", type="primary", use_container_width=True):
+        doc = Document()
+        doc.add_heading("ATTRIBUTE AGREEMENT ANALYSIS REPORT - VISUAL INSPECTION", 1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph(f"Product: LV Tips | Date: {datetime.now().strftime('%d/%m/%Y')} | Total Sample: {len(df_aaa)}")
+        doc.add_heading("Summary", 2)
+        doc.add_paragraph(f"Repeatability (Within Operator): {repeat_pct:.1f}%\nInter-Operator Agreement: {inter_pct:.1f}%\nAccuracy vs Standard: {accuracy:.1f}%")
+        doc.add_heading("Criteria", 2)
+        doc.add_paragraph(">=90% = Pass, 80-90% = Marginal (training), <80% = Fail")
+        doc.add_heading("Data", 2)
+        t = doc.add_table(rows=1, cols=len(df_aaa.columns))
+        t.style = 'Table Grid'
+        for i, col in enumerate(df_aaa.columns):
+            t.cell(0,i).text = str(col)
+        for _, row in df_aaa.iterrows():
+            rw = t.add_row().cells
+            for i, val in enumerate(row):
+                rw[i].text = str(val)
+        bio = io.BytesIO()
+        doc.save(bio)
+        bio.seek(0)
+        st.download_button("📥 Download AAA Report", data=bio, file_name=f"AAA_Visual_Report_{datetime.now().strftime('%Y%m%d')}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
 def trial_report_tab():
     st.subheader("🧪 Trial Report - Standard + Analisa Otomatis")
@@ -395,7 +499,7 @@ def dmaic_tab():
             
             top_80 = df_pareto[df_pareto["Cumulative%"] <= 80]
             if not top_80.empty:
-                st.success(f"🎯 Fokus: {', '.join(top_80['DefectType'].tolist())} = 80% masalah (Pareto Principle)")
+                st.success(f"🎯 Fokus: {', '.join(top_80['DefectType'].tolist())} = 80% masalah")
         
         baseline = st.text_input("Baseline Yield / Defect Rate", "Defect 5.2%, Yield 94.8%", key="dmaic_baseline")
         measurement_method = st.text_area("How we measure", "Visual 100% under LED 6W 580LM, jarak 30cm", height=60, key="dmaic_meas_method")
@@ -453,18 +557,15 @@ def dmaic_tab():
         if not before_after.empty:
             fig_ba = px.bar(before_after, x="Defect", y="Qty", color="Phase", barmode="group", title="Before vs After - Defect Qty (Auto)", color_discrete_map={"Before": "#ef5350", "After": "#66bb6a"})
             st.plotly_chart(fig_ba, use_container_width=True)
-            
             fig_yield = px.bar(before_after.drop_duplicates("Phase"), x="Phase", y="Yield", title="Yield Before vs After", color="Phase", color_discrete_map={"Before": "#ef5350", "After": "#66bb6a"})
             fig_yield.add_hline(y=98, line_dash="dash", line_color="green", annotation_text="Target 98%")
             st.plotly_chart(fig_yield, use_container_width=True)
-            
             if len(before_after) >= 2:
                 before_total = before_after[before_after["Phase"]=="Before"]["Qty"].sum()
                 after_total = before_after[before_after["Phase"]=="After"]["Qty"].sum()
                 if before_total > 0:
                     imp_pct = (before_total - after_total) / before_total * 100
                     st.success(f"🚀 Improvement: {imp_pct:.1f}% penurunan defect! Dari {before_total} ke {after_total}")
-        
         improve_result = st.text_area("Hasil Improvement", "Setelah implementasi:\n- Defect BLACK DOT turun 89%\n- Yield naik dari 94.8% ke 98.2%", height=100, key="improve_result")
         cost = st.text_input("Cost / Benefit", "Cost: Purging 2kg, Benefit: Saving Rp 5jt/minggu", key="improve_cost")
     
@@ -484,10 +585,8 @@ def dmaic_tab():
         h = doc.add_heading(f"DMAIC REPORT - {final_issue}", 1)
         h.alignment = WD_ALIGN_PARAGRAPH.CENTER
         doc.add_paragraph(f"DMAIC No: {dmaic_no} | Product: {product} | Date: {dmaic_date} | Team: {team}")
-        
         doc.add_heading("1. DEFINE", 2)
         doc.add_paragraph(f"Problem: {problem}\nGoal: {goal}\nScope: {scope}\nBaseline: {baseline}")
-        
         doc.add_heading("2. MEASURE - Pareto", 2)
         doc.add_paragraph(f"Method: {measurement_method}")
         if not df_m.empty:
@@ -499,12 +598,10 @@ def dmaic_tab():
                 rw = t.add_row().cells
                 for i, val in enumerate(row):
                     rw[i].text = str(val)
-        
         doc.add_heading("3. ANALYZE - Fishbone", 2)
         doc.add_paragraph(f"Man: {man}\nMachine: {machine}\nMaterial: {material}\nMethod: {method}\nMold: {mold}")
         doc.add_heading("5 Why - Root Cause", 2)
         doc.add_paragraph(f"{why1}: {ans1}\n{why2}: {ans2}\n{why3}: {ans3}\n{why4}: {ans4}\nROOT: {why5}: {ans5}")
-        
         doc.add_heading("4. IMPROVE", 2)
         if not improve_action.empty:
             t = doc.add_table(rows=1, cols=len(improve_action.columns))
@@ -516,28 +613,28 @@ def dmaic_tab():
                 for i, val in enumerate(row):
                     rw[i].text = str(val)
         doc.add_paragraph(f"Result: {improve_result}\nCost: {cost}")
-        
         doc.add_heading("5. CONTROL", 2)
         doc.add_paragraph(f"Control: {control_plan}\nMonitoring: {monitoring}\nStandardization: {standardization}\nLesson: {lesson}")
-        
         bio = io.BytesIO()
         doc.save(bio)
         bio.seek(0)
-        st.success(f"DMAIC {dmaic_no} jadi! Charts ada di dashboard, report .docx siap print.")
+        st.success(f"DMAIC {dmaic_no} jadi!")
         st.download_button("📥 Download DMAIC Report", data=bio, file_name=f"{dmaic_no}_{final_issue}_DMAIC.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
 # ================= MAIN =================
-st.title("📊 Quality AI PRO - 6 Modules Auto Chart")
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 MSA", "📄 WI Generator", "🖼️ Screenshot Compare", "🧪 Trial Report", "📚 Catalog Reject", "🌀 DMAIC Auto Chart"])
+st.title("📊 Quality AI PRO - 7 Modules")
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📊 MSA Variabel", "👁️ AAA Visual", "📄 WI Generator", "🖼️ Screenshot Compare", "🧪 Trial Report", "📚 Catalog Reject", "🌀 DMAIC Auto Chart"])
 with tab1:
     msa_tab()
 with tab2:
-    wi_tab()
+    aaa_visual_tab()
 with tab3:
-    comparator_tab()
+    wi_tab()
 with tab4:
-    trial_report_tab()
+    comparator_tab()
 with tab5:
-    catalog_reject_tab()
+    trial_report_tab()
 with tab6:
+    catalog_reject_tab()
+with tab7:
     dmaic_tab()
