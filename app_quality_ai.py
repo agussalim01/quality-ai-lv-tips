@@ -2,14 +2,14 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from docx import Document
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 import io, re, os, difflib
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="Quality AI PRO - 4 Modules", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Quality AI PRO - 5 Modules", page_icon="📊", layout="wide")
 
 # ================= HELPER WI GENERATOR =================
 def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, steps_text):
@@ -94,7 +94,6 @@ def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, 
         pass
     return doc
 
-# ================= HELPER COMPARATOR =================
 def extract_all(docx_file):
     doc = Document(docx_file)
     items = []
@@ -254,12 +253,10 @@ def trial_report_tab():
     with c2:
         parameters = st.text_area("Parameter Trial", "1. Suhu: 25C\n2. Speed: 100rpm\n3. Material: LV Tips batch A\n4. Lampu: LED 6W", height=100, key="tr_param")
         method = st.text_area("Method", "1. Siapkan 100 pcs sample\n2. Running QC visual\n3. Catat OK/NG\n4. Analisa defect", height=100, key="tr_method")
-    
     st.divider()
     st.write("**📊 Hasil Trial**")
     tab_upload, tab_manual = st.tabs(["📤 Upload Excel/CSV", "✏️ Input Manual"])
     df_result = None
-    
     with tab_upload:
         data_file = st.file_uploader("Upload hasil trial", type=["csv", "xlsx"], key="trial_data")
         if data_file:
@@ -277,9 +274,8 @@ def trial_report_tab():
                 cA.metric("Total", len(df_result))
                 cB.metric("OK", ok_count)
                 cC.metric("Yield", f"{yield_pct:.1f}%")
-                fig = px.pie(values=[ok_count, ng_count], names=["OK", "NG"], title="Hasil Trial", color_discrete_sequence=["#2e7d32", "#c62828"])
+                fig = px.pie(values=[ok_count, ng_count], names=["OK", "NG"], title="Hasil Trial")
                 st.plotly_chart(fig, use_container_width=True)
-    
     with tab_manual:
         manual_df = st.data_editor(pd.DataFrame([
             {"Sample": "S001", "Parameter": "Visual", "Result": "OK", "Notes": ""},
@@ -288,16 +284,13 @@ def trial_report_tab():
         ]), num_rows="dynamic", use_container_width=True, key="trial_manual")
         if df_result is None:
             df_result = manual_df
-    
     analysis = st.text_area("🧠 Analisa", "Dari hasil trial, defect utama adalah Flash (X%). Penyebab kemungkinan...", height=130, key="tr_analysis")
     conclusion = st.text_area("✅ Conclusion & Recommendation", "Trial PASS dengan yield X%. Rekomendasi: Lanjutkan ke mass production / Perlu perbaikan...", height=100, key="tr_conc")
-    
     if st.button("📄 Generate Trial Report FINAL", type="primary", use_container_width=True, key="gen_trial"):
         doc = Document()
         title = doc.add_heading(f"TRIAL REPORT", 1)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         doc.add_paragraph(f"Trial No: {trial_no} | Product: {product} | Date: {trial_date} | PIC: {pic}").alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
         doc.add_heading("1. Objective", 2)
         doc.add_paragraph(objective)
         doc.add_heading("2. Parameters", 2)
@@ -314,10 +307,6 @@ def trial_report_tab():
                 rw = t.add_row().cells
                 for i, val in enumerate(row):
                     rw[i].text = str(val)
-            # Summary
-            if "Result" in df_result.columns:
-                ok = len(df_result[df_result["Result"].astype(str).str.contains("OK|PASS", case=False, na=False)])
-                doc.add_paragraph(f"Total: {len(df_result)}, OK: {ok}, Yield: {ok/len(df_result)*100:.1f}%")
         doc.add_heading("5. Analysis", 2)
         doc.add_paragraph(analysis)
         doc.add_heading("6. Conclusion & Recommendation", 2)
@@ -329,18 +318,80 @@ def trial_report_tab():
         appr.cell(0,1).text = "Checked by"
         appr.cell(0,2).text = "Approved by"
         appr.cell(1,0).text = pic
-        appr.cell(1,1).text = ""
-        appr.cell(1,2).text = ""
-        
         bio = io.BytesIO()
         doc.save(bio)
         bio.seek(0)
-        st.success(f"Tial Report {trial_no} jadi!")
+        st.success(f"Trial Report {trial_no} jadi!")
         st.download_button("📥 Download Trial Report", data=bio, file_name=f"{trial_no}_Trial_Report.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
+def catalog_reject_tab():
+    st.subheader("📚 Catalog Reject Injection")
+    st.info("Katalog ini berisi defect injection umum untuk LV Tips & general injection. Klik untuk detail + action. Upload foto asli kamu untuk menggantikan placeholder.")
+    
+    # Buat folder catalog jika belum ada
+    os.makedirs("catalog_images", exist_ok=True)
+    
+    catalog = [
+        {"name": "SHORT SHOT", "alias": "Isi Tidak Penuh / Tip Kosong", "level": "CRITICAL", "desc": "Part tidak terisi penuh, ujung tip kosong/patah. Sering terjadi di LV Tips clear.", "cause": ["Material kurang", "Suhu barrel rendah", "Injection pressure rendah", "Mold venting buntu", "Nozzle buntu"], "action": ["Cek hopper & material feed", "Naikkan barrel temp +10-15C", "Naikkan injection pressure 5-10%", "Bersihkan venting mold", "Purging nozzle"], "criteria": "REJECT 100% - Sort lot"},
+        {"name": "FLASH / BURR", "alias": "Selaput tipis di parting line", "level": "MAJOR", "desc": "Kelebihan material tipis di sekeliling part, bahaya masuk ke produk.", "cause": ["Clamping force kurang", "Mold aus/rusak", "Injection pressure terlalu tinggi", "Mold kotor"], "action": ["Naikkan clamping force", "Cek kondisi mold - repair jika aus", "Turunkan injection pressure/speed", "Bersihkan parting line", "Trial 5 shots"], "criteria": "REJECT jika flash >0.1mm"},
+        {"name": "SINK MARK", "alias": "Cekungan / Lekukan permukaan", "level": "MINOR-MAJOR", "desc": "Permukaan ada cekungan seperti kawah di area tebal.", "cause": ["Holding pressure kurang", "Cooling time kurang", "Shrinkage tinggi", "Gate kecil"], "action": ["Naikkan holding pressure & time", "Tambah cooling time 2-3 detik", "Turunkan barrel temp", "Cek gate design"], "criteria": "REJECT jika di sealing area"},
+        {"name": "BURN MARK", "alias": "Gosong / Hitam kecoklatan", "level": "CRITICAL", "desc": "Warna coklat/hitam terbakar karena gas terjebak (diesel effect).", "cause": ["Venting buntu - gas trap", "Injection speed terlalu tinggi", "Suhu terlalu tinggi"], "action": ["STOP - Panggil teknisi", "Bersihkan/tambah venting", "Turunkan injection speed 20%", "Turunkan suhu barrel"], "criteria": "REJECT 100% Kontaminasi"},
+        {"name": "WELD LINE", "alias": "Garis sambungan aliran", "level": "MAJOR", "desc": "Garis terlihat di part, kekuatan lemah.", "cause": ["Suhu rendah", "Speed rendah", "Mold dingin"], "action": ["Naikkan barrel & mold temp", "Naikkan injection speed", "Cek gate position"], "criteria": "REJECT jika di critical area"},
+        {"name": "BLACK DOT / CONTAMINATION", "alias": "Titik hitam", "level": "CRITICAL untuk LV Tips", "desc": "Titik hitam kecil di part clear - defect paling sering di LV Tips.", "cause": ["Material kontaminasi", "Barrel kotor/degradasi", "Purging kurang", "Hopper kotor"], "action": ["Purging 10 shots", "Bersihkan hopper & dryer", "Ganti batch material", "Cek screw & barrel"], "criteria": "REJECT 100% visual under LED 6W"},
+        {"name": "SPLAY / SILVER STREAK", "alias": "Garis perak / Moisture", "level": "MAJOR", "desc": "Garis perak di permukaan karena moisture.", "cause": ["Material basah", "Drying kurang", "Suhu terlalu tinggi"], "action": ["Cek dryer - pastikan <0.02% moisture", "Tambah drying time 2 jam", "Turunkan nozzle temp", "Cek material storage"], "criteria": "REJECT jika terlihat jelas"},
+        {"name": "WARPAGE", "alias": "Bengkok / Tidak rata", "level": "MAJOR", "desc": "Part bengkok / tidak rata setelah eject.", "cause": ["Cooling tidak merata", "Ejector tidak balance", "Shrinkage tidak merata"], "action": ["Cek cooling channel", "Balance cooling time", "Cek ejector pin", "Turunkan mold temp"], "criteria": "REJECT jika melebihi tolerance"},
+    ]
+    
+    search = st.text_input("🔍 Cari defect", "", key="cat_search")
+    level_filter = st.selectbox("Filter Level", ["ALL", "CRITICAL", "MAJOR", "MINOR-MAJOR"], key="cat_filter")
+    
+    for item in catalog:
+        if search and search.lower() not in item["name"].lower() and search.lower() not in item["alias"].lower():
+            continue
+        if level_filter != "ALL" and level_filter not in item["level"]:
+            continue
+            
+        with st.expander(f"🔴 {item['name']} - {item['alias']} [{item['level']}]", expanded=False):
+            c1, c2 = st.columns([1, 1.5])
+            with c1:
+                # Cek apakah ada foto asli di catalog_images
+                custom_path = f"catalog_images/{item['name'].replace(' ', '_').replace('/', '_')}.jpg"
+                if os.path.exists(custom_path):
+                    st.image(custom_path, caption=f"Foto Asli: {item['name']}", use_container_width=True)
+                else:
+                    st.info(f"📸 Contoh: {item['name']}\n\nUpload foto asli kamu dengan nama:\n{custom_path}\n\nUntuk mengganti placeholder ini.")
+                    # Tampilkan upload di dalam expander
+                    up = st.file_uploader(f"Upload foto {item['name']}", type=["jpg","png","jpeg"], key=f"up_{item['name']}")
+                    if up:
+                        with open(custom_path, "wb") as f:
+                            f.write(up.getbuffer())
+                        st.success("Foto tersimpan! Refresh halaman")
+                        st.image(custom_path, use_container_width=True)
+                st.error(f"Kriteria: {item['criteria']}")
+            with c2:
+                st.write(f"**Deskripsi:** {item['desc']}")
+                st.write("**⚠️ Penyebab Umum:**")
+                for cause in item["cause"]:
+                    st.write(f"- {cause}")
+                st.write("**✅ Action / Rekomendasi:**")
+                for act in item["action"]:
+                    st.write(f"● {act}")
+                st.warning("Action QC: Sort 100% lot yang sama, simpan sample NG untuk review Engineering & Mold")
+    
+    st.divider()
+    st.subheader("📤 Upload Foto Reject Asli Massal")
+    st.caption("Upload banyak foto sekaligus, nanti masuk ke catalog_images")
+    multi = st.file_uploader("Upload foto-foto reject (bisa banyak)", type=["jpg","png","jpeg"], accept_multiple_files=True, key="multi_upload")
+    if multi:
+        for f in multi:
+            path = f"catalog_images/{f.name}"
+            with open(path, "wb") as out:
+                out.write(f.getbuffer())
+        st.success(f"{len(multi)} foto tersimpan di catalog_images/")
+
 # ================= MAIN =================
-st.title("📊 Quality AI PRO - 4 Modules")
-tab1, tab2, tab3, tab4 = st.tabs(["📊 MSA", "📄 WI Generator", "🖼️ Screenshot Compare", "🧪 Trial Report"])
+st.title("📊 Quality AI PRO - 5 Modules")
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 MSA", "📄 WI Generator", "🖼️ Screenshot Compare", "🧪 Trial Report", "📚 Catalog Reject"])
 with tab1:
     msa_tab()
 with tab2:
@@ -349,3 +400,5 @@ with tab3:
     comparator_tab()
 with tab4:
     trial_report_tab()
+with tab5:
+    catalog_reject_tab()
