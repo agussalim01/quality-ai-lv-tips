@@ -8,8 +8,10 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 import io, re, os, difflib
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-st.set_page_config(page_title="Quality AI PRO - 6 Modules", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Quality AI PRO - 6 Modules Auto Chart", page_icon="📊", layout="wide")
 
 # ================= HELPER WI GENERATOR =================
 def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, steps_text):
@@ -274,7 +276,7 @@ def trial_report_tab():
         if df_result is None:
             df_result = manual_df
     analysis = st.text_area("🧠 Analisa", "Dari hasil trial, defect utama adalah Flash (X%).", height=130, key="tr_analysis")
-    conclusion = st.text_area("✅ Conclusion", "Trial PASS dengan yield X%. Rekomendasi: Lanjutkan ke mass production", height=100, key="tr_conc")
+    conclusion = st.text_area("✅ Conclusion", "Trial PASS dengan yield X%.", height=100, key="tr_conc")
     if st.button("📄 Generate Trial Report FINAL", type="primary", use_container_width=True, key="gen_trial"):
         doc = Document()
         doc.add_heading(f"TRIAL REPORT", 1).alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -331,10 +333,9 @@ def catalog_reject_tab():
                     st.write(f"● {a}")
 
 def dmaic_tab():
-    st.subheader("🌀 DMAIC Generator - Injection Issue")
-    st.caption("DMAIC untuk issue injection - nyambung dari Catalog Reject. Isi form, langsung jadi laporan .docx")
+    st.subheader("🌀 DMAIC Generator - Injection Issue + Auto Chart")
+    st.caption("Auto Pareto 80/20, Before-After Chart, Trend - langsung jadi")
     
-    # D - DEFINE
     st.markdown("### 1️⃣ D - DEFINE")
     c1, c2 = st.columns(2)
     with c1:
@@ -342,19 +343,17 @@ def dmaic_tab():
         product = st.text_input("Product / Part", "LV Tips NT8", key="dmaic_prod")
         issue_type = st.selectbox("Jenis Defect (dari Catalog)", ["SHORT SHOT", "FLASH / BURR", "BLACK DOT / CONTAMINATION", "BURN MARK", "SINK MARK", "WELD LINE", "SPLAY", "WARPAGE", "Other"], key="dmaic_issue")
         other_issue = st.text_input("Jika Other, tulis issue", "", key="dmaic_other")
-        problem = st.text_area("Problem Statement", f"Terjadi peningkatan defect {issue_type} di line injection LV Tips. Defect rate X% di atas target Y%. Berdampak ke yield dan customer complaint.", height=100, key="dmaic_prob")
+        problem = st.text_area("Problem Statement", f"Terjadi peningkatan defect {issue_type} di line injection LV Tips. Defect rate X% di atas target Y%.", height=100, key="dmaic_prob")
     with c2:
         dmaic_date = st.date_input("Date", datetime.now(), key="dmaic_date")
         team = st.text_input("Team / PIC", "Quality, Engineering, Production, Mold Maintenance", key="dmaic_team")
         goal = st.text_area("Goal / Target", "Menurunkan defect rate dari X% menjadi <0.5% dalam 2 minggu.\nMeningkatkan yield dari 92% ke 98%", height=80, key="dmaic_goal")
-        scope = st.text_area("Scope", "Line: Injection Machine #3\nMold: Mold LV Tips 32 cavity\nMaterial: PP Clear batch A\nPeriode: 1-15 Nov 2024", height=100, key="dmaic_scope")
+        scope = st.text_area("Scope", "Line: Injection Machine #3\nMold: 32 cavity\nMaterial: PP Clear\nPeriode: 1-15 Nov 2024", height=100, key="dmaic_scope")
     
     final_issue = other_issue if other_issue else issue_type
     
-    # M - MEASURE
     st.divider()
-    st.markdown("### 2️⃣ M - MEASURE")
-    st.write("Upload data defect atau input manual untuk Pareto Chart")
+    st.markdown("### 2️⃣ M - MEASURE + Auto Pareto 80/20")
     m_col1, m_col2 = st.columns([1,1])
     with m_col1:
         measure_file = st.file_uploader("Upload data defect (.csv / .xlsx) - kolom: DefectType, Qty", type=["csv","xlsx"], key="dmaic_measure_file")
@@ -365,89 +364,132 @@ def dmaic_tab():
                 df_m = pd.read_excel(measure_file)
         else:
             df_m = st.data_editor(pd.DataFrame([
-                {"DefectType": "BLACK DOT", "Qty": 45},
-                {"DefectType": "FLASH", "Qty": 30},
-                {"DefectType": "SHORT SHOT", "Qty": 15},
-                {"DefectType": "SINK MARK", "Qty": 10},
+                {"DefectType": "BLACK DOT", "Qty": 45, "Date": "2024-11-01"},
+                {"DefectType": "FLASH", "Qty": 30, "Date": "2024-11-01"},
+                {"DefectType": "SHORT SHOT", "Qty": 15, "Date": "2024-11-02"},
+                {"DefectType": "SINK MARK", "Qty": 10, "Date": "2024-11-02"},
+                {"DefectType": "BLACK DOT", "Qty": 50, "Date": "2024-11-02"},
+                {"DefectType": "BURN MARK", "Qty": 5, "Date": "2024-11-03"},
             ]), num_rows="dynamic", use_container_width=True, key="dmaic_measure_edit")
         
-        # Metrics
         total_defect = df_m["Qty"].sum() if "Qty" in df_m.columns else 0
-        st.metric("Total Defect", total_defect)
+        c_m1, c_m2 = st.columns(2)
+        c_m1.metric("Total Defect", total_defect)
+        if not df_m.empty:
+            top_defect = df_m.groupby("DefectType")["Qty"].sum().sort_values(ascending=False).head(1)
+            if not top_defect.empty:
+                c_m2.metric("Top Defect", f"{top_defect.index[0]} ({top_defect.values[0]})")
     
     with m_col2:
         if not df_m.empty and "DefectType" in df_m.columns and "Qty" in df_m.columns:
-            fig = px.bar(df_m.sort_values("Qty", ascending=False), x="DefectType", y="Qty", title="Pareto Defect - Measure Phase", color="Qty", color_continuous_scale="Reds")
-            st.plotly_chart(fig, use_container_width=True)
-        baseline = st.text_input("Baseline Yield / Defect Rate saat ini", "Defect 5.2%, Yield 94.8%", key="dmaic_baseline")
-        measurement_method = st.text_area("How we measure", "Visual inspection 100% under LED 6W 580LM, jarak 30cm, tatakan putih. Data diambil per shift dari check sheet QC.", height=80, key="dmaic_meas_method")
+            df_pareto = df_m.groupby("DefectType")["Qty"].sum().reset_index().sort_values("Qty", ascending=False)
+            df_pareto["Cumulative"] = df_pareto["Qty"].cumsum()
+            df_pareto["Cumulative%"] = df_pareto["Cumulative"] / df_pareto["Qty"].sum() * 100
+            
+            fig_combined = make_subplots(specs=[[{"secondary_y": True}]])
+            fig_combined.add_trace(go.Bar(x=df_pareto["DefectType"], y=df_pareto["Qty"], name="Qty", marker_color="#ef5350"), secondary_y=False)
+            fig_combined.add_trace(go.Scatter(x=df_pareto["DefectType"], y=df_pareto["Cumulative%"], name="Cumulative %", mode="lines+markers", line=dict(color="#1e88e5", width=3)), secondary_y=True)
+            fig_combined.add_hline(y=80, line_dash="dash", line_color="green", secondary_y=True, annotation_text="80%")
+            fig_combined.update_layout(title="Pareto 80/20 - Auto", yaxis=dict(title="Qty"), yaxis2=dict(title="Cumulative %", range=[0,100]))
+            st.plotly_chart(fig_combined, use_container_width=True)
+            
+            top_80 = df_pareto[df_pareto["Cumulative%"] <= 80]
+            if not top_80.empty:
+                st.success(f"🎯 Fokus: {', '.join(top_80['DefectType'].tolist())} = 80% masalah (Pareto Principle)")
+        
+        baseline = st.text_input("Baseline Yield / Defect Rate", "Defect 5.2%, Yield 94.8%", key="dmaic_baseline")
+        measurement_method = st.text_area("How we measure", "Visual 100% under LED 6W 580LM, jarak 30cm", height=60, key="dmaic_meas_method")
     
-    # A - ANALYZE
+    if "Date" in df_m.columns:
+        st.write("**📈 Trend Defect Over Time - Auto**")
+        try:
+            df_trend = df_m.groupby(["Date", "DefectType"])["Qty"].sum().reset_index()
+            fig_trend = px.line(df_trend, x="Date", y="Qty", color="DefectType", markers=True, title="Trend Defect Harian")
+            st.plotly_chart(fig_trend, use_container_width=True)
+        except:
+            pass
+    
     st.divider()
     st.markdown("### 3️⃣ A - ANALYZE (Fishbone + 5 Why)")
     a1, a2 = st.columns(2)
     with a1:
-        st.write("**Fishbone / Ishikawa - 5M**")
-        man = st.text_area("Man", "Operator baru, training kurang, fatigue", height=60, key="fish_man")
-        machine = st.text_area("Machine", "Nozzle buntu, barrel temp tidak stabil, clamping aus", height=60, key="fish_machine")
-        material = st.text_area("Material", "Material kontaminasi, moisture tinggi, batch beda", height=60, key="fish_mat")
-        method = st.text_area("Method", "Purging kurang, parameter tidak standar, venting tidak dibersihkan", height=60, key="fish_method")
-        mold = st.text_area("Mold / Measurement", "Venting buntu, mold aus, gate kecil, measurement tidak konsisten", height=60, key="fish_mold")
+        man = st.text_area("Man", "Operator baru, training kurang", height=60, key="fish_man")
+        machine = st.text_area("Machine", "Nozzle buntu, barrel temp tidak stabil", height=60, key="fish_machine")
+        material = st.text_area("Material", "Material kontaminasi, moisture tinggi", height=60, key="fish_mat")
+        method = st.text_area("Method", "Purging kurang, parameter tidak standar", height=60, key="fish_method")
+        mold = st.text_area("Mold / Measurement", "Venting buntu, mold aus, gate kecil", height=60, key="fish_mold")
     with a2:
-        st.write("**5 Why Analysis**")
         why1 = st.text_input("Why 1", f"Kenapa terjadi {final_issue}?", key="why1")
-        ans1 = st.text_input("Answer 1", "Karena material tidak mengisi penuh / ada kontaminasi", key="ans1")
+        ans1 = st.text_input("Answer 1", "Karena material tidak mengisi penuh", key="ans1")
         why2 = st.text_input("Why 2", "Kenapa bisa begitu?", key="why2")
-        ans2 = st.text_input("Answer 2", "Karena nozzle buntu / hopper kotor", key="ans2")
+        ans2 = st.text_input("Answer 2", "Karena nozzle buntu", key="ans2")
         why3 = st.text_input("Why 3", "Kenapa bisa begitu?", key="why3")
-        ans3 = st.text_input("Answer 3", "Karena purging kurang & maintenance tidak terjadwal", key="ans3")
+        ans3 = st.text_input("Answer 3", "Karena purging kurang", key="ans3")
         why4 = st.text_input("Why 4", "Kenapa bisa begitu?", key="why4")
-        ans4 = st.text_input("Answer 4", "Karena tidak ada checklist purging & PM mold", key="ans4")
+        ans4 = st.text_input("Answer 4", "Tidak ada checklist purging", key="ans4")
         why5 = st.text_input("Why 5 - ROOT CAUSE", "Root Cause", key="why5")
-        ans5 = st.text_area("Root Cause", "Tidak ada standard purging dan PM venting mold tidak terjadwal, menyebabkan kontaminasi dan gas trap", height=60, key="ans5")
+        ans5 = st.text_area("Root Cause", "Tidak ada standard purging dan PM venting mold tidak terjadwal", height=60, key="ans5")
     
-    # I - IMPROVE
     st.divider()
-    st.markdown("### 4️⃣ I - IMPROVE")
+    st.markdown("### 4️⃣ I - IMPROVE + Auto Before-After Chart")
     i1, i2 = st.columns(2)
     with i1:
         improve_action = st.data_editor(pd.DataFrame([
-            {"No": 1, "Action": "Purging standard 10 shots tiap ganti batch", "PIC": "Production", "Due": "Immediate", "Status": "Done"},
-            {"No": 2, "Action": "Bersihkan venting mold & tambah venting", "PIC": "Mold Maint", "Due": "2 hari", "Status": "On Progress"},
-            {"No": 3, "Action": "Buat checklist drying material <0.02%", "PIC": "Quality", "Due": "3 hari", "Status": "Plan"},
-            {"No": 4, "Action": "Training operator parameter standard", "PIC": "Engineering", "Due": "1 minggu", "Status": "Plan"},
+            {"No": 1, "Action": "Purging standard 10 shots", "PIC": "Production", "Due": "Immediate", "Status": "Done"},
+            {"No": 2, "Action": "Bersihkan venting mold", "PIC": "Mold Maint", "Due": "2 hari", "Status": "On Progress"},
+            {"No": 3, "Action": "Checklist drying <0.02%", "PIC": "Quality", "Due": "3 hari", "Status": "Plan"},
+            {"No": 4, "Action": "Training parameter standard", "PIC": "Engineering", "Due": "1 minggu", "Status": "Plan"},
         ]), num_rows="dynamic", use_container_width=True, key="improve_table")
-    with i2:
-        improve_result = st.text_area("Hasil Improvement / Trial Result", "Setelah implementasi:\n- Defect BLACK DOT turun dari 45 ke 5 (89%)\n- Yield naik dari 94.8% ke 98.2%\n- Trial 1000 pcs: OK 982, NG 18", height=150, key="improve_result")
-        cost = st.text_input("Cost / Benefit", "Cost: Purging material 2kg, Benefit: Saving reject Rp 5jt/minggu", key="improve_cost")
+        
+        st.write("**📊 Input Before vs After untuk Auto Chart**")
+        before_after = st.data_editor(pd.DataFrame([
+            {"Phase": "Before", "Defect": "BLACK DOT", "Qty": 45, "Yield": 94.8},
+            {"Phase": "After", "Defect": "BLACK DOT", "Qty": 5, "Yield": 98.2},
+            {"Phase": "Before", "Defect": "FLASH", "Qty": 30, "Yield": 94.8},
+            {"Phase": "After", "Defect": "FLASH", "Qty": 8, "Yield": 98.2},
+        ]), num_rows="dynamic", use_container_width=True, key="before_after")
     
-    # C - CONTROL
+    with i2:
+        if not before_after.empty:
+            fig_ba = px.bar(before_after, x="Defect", y="Qty", color="Phase", barmode="group", title="Before vs After - Defect Qty (Auto)", color_discrete_map={"Before": "#ef5350", "After": "#66bb6a"})
+            st.plotly_chart(fig_ba, use_container_width=True)
+            
+            fig_yield = px.bar(before_after.drop_duplicates("Phase"), x="Phase", y="Yield", title="Yield Before vs After", color="Phase", color_discrete_map={"Before": "#ef5350", "After": "#66bb6a"})
+            fig_yield.add_hline(y=98, line_dash="dash", line_color="green", annotation_text="Target 98%")
+            st.plotly_chart(fig_yield, use_container_width=True)
+            
+            if len(before_after) >= 2:
+                before_total = before_after[before_after["Phase"]=="Before"]["Qty"].sum()
+                after_total = before_after[before_after["Phase"]=="After"]["Qty"].sum()
+                if before_total > 0:
+                    imp_pct = (before_total - after_total) / before_total * 100
+                    st.success(f"🚀 Improvement: {imp_pct:.1f}% penurunan defect! Dari {before_total} ke {after_total}")
+        
+        improve_result = st.text_area("Hasil Improvement", "Setelah implementasi:\n- Defect BLACK DOT turun 89%\n- Yield naik dari 94.8% ke 98.2%", height=100, key="improve_result")
+        cost = st.text_input("Cost / Benefit", "Cost: Purging 2kg, Benefit: Saving Rp 5jt/minggu", key="improve_cost")
+    
     st.divider()
     st.markdown("### 5️⃣ C - CONTROL")
     c_c1, c_c2 = st.columns(2)
     with c_c1:
-        control_plan = st.text_area("Control Plan", "1. Checklist purging wajib tiap ganti material - diisi operator & checked SPV\n2. PM venting mold tiap 2 minggu\n3. Monitoring defect di hourly board\n4. Alert jika defect >1% per shift", height=120, key="control_plan")
-        monitoring = st.text_area("Monitoring / Dashboard", "Buat dashboard harian defect injection di line. Review mingguan di Quality Meeting. Jika defect naik >1%, trigger DMAIC lagi.", height=80, key="control_monitor")
+        control_plan = st.text_area("Control Plan", "1. Checklist purging wajib tiap ganti material\n2. PM venting tiap 2 minggu\n3. Monitoring defect hourly board\n4. Alert jika defect >1%", height=120, key="control_plan")
+        monitoring = st.text_area("Monitoring", "Dashboard harian defect injection. Review mingguan Quality Meeting.", height=80, key="control_monitor")
     with c_c2:
-        standardization = st.text_area("Standardization", "Update WI: WI-INJ-003 Rev 2 - Tambah langkah purging 10 shots\nUpdate Checklist: Form drying & purging\nUpdate PM: Schedule PM mold", height=120, key="control_std")
-        lesson = st.text_area("Lesson Learned", "Pentingnya purging standard & PM venting berkala untuk mencegah kontaminasi di LV Tips clear product.", height=80, key="control_lesson")
+        standardization = st.text_area("Standardization", "Update WI: WI-INJ-003 Rev 2\nUpdate Checklist Form\nUpdate PM Schedule", height=120, key="control_std")
+        lesson = st.text_area("Lesson Learned", "Pentingnya purging standard & PM venting berkala", height=80, key="control_lesson")
     
-    # GENERATE REPORT
     st.divider()
-    if st.button("📄 Generate DMAIC Report FINAL", type="primary", use_container_width=True):
+    if st.button("📄 Generate DMAIC Report FINAL + Charts", type="primary", use_container_width=True):
         doc = Document()
         h = doc.add_heading(f"DMAIC REPORT - {final_issue}", 1)
         h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        doc.add_paragraph(f"DMAIC No: {dmaic_no} | Product: {product} | Date: {dmaic_date} | Team: {team}").alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph(f"DMAIC No: {dmaic_no} | Product: {product} | Date: {dmaic_date} | Team: {team}")
         
         doc.add_heading("1. DEFINE", 2)
-        doc.add_paragraph(f"Problem Statement: {problem}")
-        doc.add_paragraph(f"Goal: {goal}")
-        doc.add_paragraph(f"Scope: {scope}")
-        doc.add_paragraph(f"Baseline: {baseline}")
+        doc.add_paragraph(f"Problem: {problem}\nGoal: {goal}\nScope: {scope}\nBaseline: {baseline}")
         
-        doc.add_heading("2. MEASURE", 2)
-        doc.add_paragraph(f"Measurement Method: {measurement_method}")
+        doc.add_heading("2. MEASURE - Pareto", 2)
+        doc.add_paragraph(f"Method: {measurement_method}")
         if not df_m.empty:
             t = doc.add_table(rows=1, cols=len(df_m.columns))
             t.style = 'Table Grid'
@@ -457,23 +499,13 @@ def dmaic_tab():
                 rw = t.add_row().cells
                 for i, val in enumerate(row):
                     rw[i].text = str(val)
-            doc.add_paragraph(f"Total Defect: {total_defect}")
         
-        doc.add_heading("3. ANALYZE - Fishbone 5M", 2)
-        doc.add_paragraph(f"Man: {man}")
-        doc.add_paragraph(f"Machine: {machine}")
-        doc.add_paragraph(f"Material: {material}")
-        doc.add_paragraph(f"Method: {method}")
-        doc.add_paragraph(f"Mold/Measurement: {mold}")
-        doc.add_heading("3b. 5 Why - Root Cause", 2)
-        doc.add_paragraph(f"Why1: {why1} - {ans1}")
-        doc.add_paragraph(f"Why2: {why2} - {ans2}")
-        doc.add_paragraph(f"Why3: {why3} - {ans3}")
-        doc.add_paragraph(f"Why4: {why4} - {ans4}")
-        doc.add_paragraph(f"ROOT CAUSE (Why5): {why5} - {ans5}")
+        doc.add_heading("3. ANALYZE - Fishbone", 2)
+        doc.add_paragraph(f"Man: {man}\nMachine: {machine}\nMaterial: {material}\nMethod: {method}\nMold: {mold}")
+        doc.add_heading("5 Why - Root Cause", 2)
+        doc.add_paragraph(f"{why1}: {ans1}\n{why2}: {ans2}\n{why3}: {ans3}\n{why4}: {ans4}\nROOT: {why5}: {ans5}")
         
         doc.add_heading("4. IMPROVE", 2)
-        doc.add_paragraph("Action Plan:")
         if not improve_action.empty:
             t = doc.add_table(rows=1, cols=len(improve_action.columns))
             t.style = 'Table Grid'
@@ -483,31 +515,20 @@ def dmaic_tab():
                 rw = t.add_row().cells
                 for i, val in enumerate(row):
                     rw[i].text = str(val)
-        doc.add_paragraph(f"Result: {improve_result}")
-        doc.add_paragraph(f"Cost/Benefit: {cost}")
+        doc.add_paragraph(f"Result: {improve_result}\nCost: {cost}")
         
         doc.add_heading("5. CONTROL", 2)
-        doc.add_paragraph(f"Control Plan: {control_plan}")
-        doc.add_paragraph(f"Monitoring: {monitoring}")
-        doc.add_paragraph(f"Standardization: {standardization}")
-        doc.add_paragraph(f"Lesson Learned: {lesson}")
-        
-        doc.add_heading("Approval", 2)
-        appr = doc.add_table(rows=2, cols=3)
-        appr.style = 'Table Grid'
-        appr.cell(0,0).text = "Prepared by"
-        appr.cell(0,1).text = "Checked by"
-        appr.cell(0,2).text = "Approved by"
+        doc.add_paragraph(f"Control: {control_plan}\nMonitoring: {monitoring}\nStandardization: {standardization}\nLesson: {lesson}")
         
         bio = io.BytesIO()
         doc.save(bio)
         bio.seek(0)
-        st.success(f"DMAIC {dmaic_no} jadi!")
+        st.success(f"DMAIC {dmaic_no} jadi! Charts ada di dashboard, report .docx siap print.")
         st.download_button("📥 Download DMAIC Report", data=bio, file_name=f"{dmaic_no}_{final_issue}_DMAIC.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
 # ================= MAIN =================
-st.title("📊 Quality AI PRO - 6 Modules")
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 MSA", "📄 WI Generator", "🖼️ Screenshot Compare", "🧪 Trial Report", "📚 Catalog Reject", "🌀 DMAIC"])
+st.title("📊 Quality AI PRO - 6 Modules Auto Chart")
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 MSA", "📄 WI Generator", "🖼️ Screenshot Compare", "🧪 Trial Report", "📚 Catalog Reject", "🌀 DMAIC Auto Chart"])
 with tab1:
     msa_tab()
 with tab2:
