@@ -5,13 +5,13 @@ from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
-import io, re, os, difflib
+import io, os, difflib
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-st.set_page_config(page_title="Quality AI PRO - 6 Modules Auto Chart", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Quality AI PRO - 6 Modules Auto Chart FINAL UNIVERSAL", page_icon="📊", layout="wide")
 
 def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, steps_text):
     doc = Document(template_path_or_file)
@@ -31,10 +31,6 @@ def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, 
     run = p.add_run(f"Doc: {doc_no} | Temp: {temp_no} | Rev: {rev} | Date: {datetime.now().strftime('%d/%m/%Y')}")
     run.font.size = Pt(8)
     run.bold = True
-    p = doc.add_paragraph()
-    run = p.add_run("Langkah Kerja")
-    run.bold = True
-    run.font.size = Pt(11)
     t2 = doc.add_table(rows=1, cols=2)
     t2.alignment = WD_TABLE_ALIGNMENT.CENTER
     try:
@@ -55,44 +51,6 @@ def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, 
     rw = t2.add_row().cells
     rw[0].text = "Total"
     rw[1].text = str(total)
-    doc.add_paragraph("")
-    p = doc.add_paragraph()
-    p.add_run("Part required :").bold = True
-    for it in part_req.split('\n'):
-        if it.strip(): doc.add_paragraph(f"●  {it.strip()}")
-    p = doc.add_paragraph()
-    p.add_run("Tools required :").bold = True
-    for it in tools_req.split('\n'):
-        if it.strip(): doc.add_paragraph(f"●  {it.strip()}")
-    doc.add_paragraph("")
-    pattern = r"(Step\s*\d+\s*:.*)"
-    parts = re.split(pattern, steps_text, flags=re.I)
-    steps = []
-    for i in range(1, len(parts), 2):
-        title = parts[i].strip()
-        body = parts[i+1] if i+1 < len(parts) else ""
-        bullets = [x.strip() for x in body.split('\n') if x.strip()]
-        steps.append((title, bullets))
-    if not steps:
-        steps = [("Work Steps", [x for x in steps_text.split('\n') if x.strip()])]
-    for title, bullets in steps:
-        p = doc.add_paragraph()
-        p.add_run(title).bold = True
-        for b in bullets:
-            if b:
-                clean = re.sub(r'^[•\-\*]\s*', '', b)
-                doc.add_paragraph(f"●  {clean}")
-    doc.add_page_break()
-    for tbl in saved_tables:
-        doc._body._element.append(tbl._tbl)
-        doc.add_paragraph("")
-    try:
-        hist_table = doc.tables[-1]
-        hist_table.cell(2,1).text = datetime.now().strftime("%m/%d/%Y")
-        hist_table.cell(2,2).text = rev
-        hist_table.cell(2,3).text = f"{proc} - {product}"
-    except:
-        pass
     return doc
 
 def extract_all(docx_file):
@@ -150,11 +108,8 @@ def create_side_screenshot(old_list, new_list, output_path="/tmp/side_by_side.pn
                 for k in range(j1, j2):
                     if y_right > H-60: break
                     txt = new_list[k][:55]
-                    is_ddff = "ddff" in txt.lower()
-                    bg = "#ff0000" if is_ddff else "#c8e6c9"
-                    fg = "white" if is_ddff else "#1b5e20"
-                    draw.rectangle([W//2+15, y_right-2, W-15, y_right+20], fill=bg)
-                    draw.text((W//2+20, y_right), f"+ {txt}", fill=fg, font=font_body)
+                    draw.rectangle([W//2+15, y_right-2, W-15, y_right+20], fill="#c8e6c9")
+                    draw.text((W//2+20, y_right), f"+ {txt}", fill="#1b5e20", font=font_body)
                     y_right += 26
             max_y = max(y_left, y_right)
             y_left = y_right = max_y + 10
@@ -165,9 +120,9 @@ def comparator_tab():
     st.subheader("🖼️ Screenshot Kiri Kanan")
     c1, c2 = st.columns(2)
     with c1:
-        old_file = st.file_uploader("📂 WI LAMA", type=["docx"], key="old_wi_fix")
+        old_file = st.file_uploader("📂 WI LAMA", type=["docx"], key="old_wi_univ")
     with c2:
-        new_file = st.file_uploader("📂 WI BARU", type=["docx"], key="new_wi_fix")
+        new_file = st.file_uploader("📂 WI BARU", type=["docx"], key="new_wi_univ")
     if old_file and new_file:
         old_list = extract_all(old_file)
         new_list = extract_all(new_file)
@@ -176,62 +131,38 @@ def comparator_tab():
         img_path = create_side_screenshot(old_list, new_list)
         st.divider()
         st.image(img_path, caption="Kiri = Lama | Kanan = Baru", use_container_width=True)
-        with open(img_path, "rb") as f:
-            st.download_button("📥 Download Screenshot PNG", data=f, file_name="WI_Kiri_Kanan.png", mime="image/png", type="primary", use_container_width=True)
-    else:
-        st.info("👆 Upload 2 WI dulu")
 
 def wi_tab():
     st.subheader("📄 WI Generator - Auto Template")
     template_file = None
-    found_name = None
     for f in os.listdir("."):
         if "TMP" in f and f.endswith(".docx"):
-            found_name = f
             template_file = f
             break
+    if not template_file:
+        template_file = st.file_uploader("Upload Template (.docx)", type=["docx"], key="wi_template_univ")
     if template_file:
-        st.success(f"✅ Template otomatis: {found_name} | Approval di BAWAH!")
-    else:
-        st.warning("Template belum ada, upload manual:")
-        template_file = st.file_uploader("Upload Template (.docx)", type=["docx"], key="wi_template_fix")
+        st.success(f"Template: {template_file}")
     c1, c2 = st.columns(2)
     with c1:
-        doc_no = st.text_input("Document No", "WIN-13-005-0015", key="wi_docno_fix")
-        product = st.text_input("Product", "NT8", key="wi_prod_fix")
-        temp_no = st.text_input("Temp Number", "TMP-11-001-0002 rev.1", key="wi_temp_fix")
-        rev = st.text_input("Rev", "0", key="wi_rev_fix")
-        proc = st.text_input("Process Desc", "QC 100% Visual Inspection LV Tips", key="wi_proc_fix")
+        doc_no = st.text_input("Document No", "WIN-13-005-0015", key="wi_docno_univ")
+        product = st.text_input("Product", "NT8", key="wi_prod_univ")
     with c2:
-        part_req = st.text_area("Part Required", "1 batch LV Tips after cutting", height=80, key="wi_part_fix")
-        tools_req = st.text_area("Tools Required", "Lampu LED 6 watt 580 LM\nTatakan LV tips\nPinset\nIonizer", height=120, key="wi_tools_fix")
-    st.write("**Time Table**")
-    time_df = st.data_editor(pd.DataFrame([
-        {"step": "Step 1 :  Susun Tips", "time": 10},
-        {"step": "Step 2 :  Check visual defect", "time": 80},
-        {"step": "Step 3 :  Data Tips OK dan Tips Reject", "time": 5},
-        {"step": "Step 4 :  Packing LV Tips", "time": 5},
-        {"step": "Step 5 : Manual Filling Process", "time": 30},
-        {"step": "Step 6 : 2nd Visual Check", "time": 5},
-        {"step": "Step 7 : Ionizer", "time": 5}
-    ]), num_rows="dynamic", use_container_width=True, key="time_editor_fix")
-    raw = st.text_area("Detail Langkah Kerja", "Step 1 :  Susun Tips\nSusun LV tips di atas tatakan\n\nStep 2 :  Check visual defect\nCek dengan lampu LED 30cm", height=200, key="wi_raw_fix")
-    if st.button("✨ Generate WI FINAL", type="primary", use_container_width=True, key="gen_wi_fix"):
-        if not template_file:
-            st.error("Template tidak ditemukan! Upload TMP-11-001-0002")
-            return
-        doc = create_wi_final(template_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, raw)
+        proc = st.text_input("Process Desc", "QC 100% Visual Inspection LV Tips", key="wi_proc_univ")
+    time_df = st.data_editor(pd.DataFrame([{"step": "Step 1 :  Susun Tips", "time": 10},{"step": "Step 2 :  Check visual defect", "time": 80}]), num_rows="dynamic", use_container_width=True, key="time_editor_univ")
+    raw = st.text_area("Detail Langkah Kerja", "Step 1 :  Susun Tips\nSusun LV tips", height=200, key="wi_raw_univ")
+    if st.button("✨ Generate WI FINAL", type="primary", use_container_width=True, key="gen_wi_univ"):
+        doc = create_wi_final(template_file, doc_no, product, "TMP-11-001-0002", "0", proc, "1 batch", "Lampu", time_df, raw)
         bio = io.BytesIO()
         doc.save(bio)
         bio.seek(0)
-        st.success(f"WI {doc_no} jadi! Approval sudah di bawah.")
         st.download_button("📥 Download WI FINAL", data=bio, file_name=f"{doc_no}_FINAL.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
 def msa_tab():
     st.subheader("📊 MSA Dashboard - FIX 44 BARIS + ISOLATED")
     if "msa_df_fix" not in st.session_state:
         st.session_state.msa_df_fix = pd.DataFrame({"Part": [1,1,1,2,2,2,3,3,3]*3, "Operator": ["A"]*9 + ["B"]*9 + ["C"]*9, "Measurement": [10.1,10.12,10.11,10.2,10.22,10.21,10.0,10.02,10.01,10.11,10.13,10.12,10.21,10.23,10.22,10.01,10.03,10.02,10.09,10.11,10.10,10.19,10.21,10.20,9.99,10.01,10.0]})
-    uploaded = st.file_uploader("Upload Data MSA (.csv/.xlsx) - AUTO deteksi header berantakan", type=["csv","xlsx","xls"], key="msa_upload_fix")
+    uploaded = st.file_uploader("Upload Data MSA (.csv/.xlsx) - AUTO deteksi header berantakan", type=["csv","xlsx","xls"], key="msa_upload_univ")
     if uploaded:
         try:
             if uploaded.name.endswith('.csv'):
@@ -267,7 +198,6 @@ def msa_tab():
                 st.success(f"✅ Terbaca {len(st.session_state.msa_df_fix)} baris FIX 44 BARIS")
             else:
                 st.error(f"Kolom Part tidak ketemu. Kolom: {list(df.columns)}")
-                st.dataframe(df.head(10))
         except Exception as e:
             st.error(f"Error MSA: {e}")
     c1, c2 = st.columns(2)
@@ -275,133 +205,136 @@ def msa_tab():
         st.dataframe(st.session_state.msa_df_fix.head(15), use_container_width=True)
     with c2:
         if not st.session_state.msa_df_fix.empty and 'Measurement' in st.session_state.msa_df_fix.columns:
-            fig = px.histogram(st.session_state.msa_df_fix, x="Measurement", color="Operator" if 'Operator' in st.session_state.msa_df_fix.columns else None, title="MSA Distribution - 44 Baris")
+            fig = px.histogram(st.session_state.msa_df_fix, x="Measurement", color="Operator" if 'Operator' in st.session_state.msa_df_fix.columns else None, title="MSA Distribution")
             st.plotly_chart(fig, use_container_width=True)
 
 def trial_report_tab():
-    st.subheader("🧪 Trial Report - Standard + Analisa Otomatis - ISOLATED FIX")
+    st.subheader("🧪 Trial Report - ISOLATED FIX")
     if "trial_manual_data" not in st.session_state:
-        st.session_state.trial_manual_data = pd.DataFrame([
-            {"Sample": "S001", "Parameter": "Visual", "Result": "OK", "Notes": ""},
-            {"Sample": "S002", "Parameter": "Visual", "Result": "NG - Flash", "Notes": "Flash di tip"},
-            {"Sample": "S003", "Parameter": "Visual", "Result": "OK", "Notes": ""},
-        ])
-    c1, c2 = st.columns(2)
-    with c1:
-        trial_no = st.text_input("Trial No", "TR-2024-001", key="tr_no_fix")
-        product = st.text_input("Product", "NT8", key="tr_prod_fix")
-        trial_date = st.date_input("Trial Date", datetime.now(), key="tr_date_fix")
-        pic = st.text_input("PIC / Engineer", "", key="tr_pic_fix")
-        objective = st.text_area("Objective / Tujuan", "Validasi proses baru untuk mengurangi defect visual", height=100, key="tr_obj_fix")
-    with c2:
-        parameters = st.text_area("Parameter Trial", "1. Suhu: 25C\n2. Speed: 100rpm\n3. Material: LV Tips batch A\n4. Lampu: LED 6W", height=100, key="tr_param_fix")
-        method = st.text_area("Method", "1. Siapkan 100 pcs sample\n2. Running QC visual\n3. Catat OK/NG\n4. Analisa defect", height=100, key="tr_method_fix")
-    st.divider()
-    st.write("**📊 Hasil Trial**")
-    tab_upload, tab_manual = st.tabs(["📤 Upload Excel/CSV", "✏️ Input Manual"])
-    df_result = None
-    with tab_upload:
-        data_file = st.file_uploader("Upload hasil trial", type=["csv", "xlsx"], key="trial_data_fix")
-        if data_file:
-            df_result = pd.read_csv(data_file) if data_file.name.endswith(".csv") else pd.read_excel(data_file)
-            st.dataframe(df_result, use_container_width=True)
-    with tab_manual:
-        edited_trial = st.data_editor(st.session_state.trial_manual_data, num_rows="dynamic", use_container_width=True, key="editor_trial_manual_fix")
-        st.session_state.trial_manual_data = edited_trial
-        if df_result is None:
-            df_result = edited_trial
-    analysis = st.text_area("🧠 Analisa", "Dari hasil trial, defect utama adalah Flash (X%).", height=130, key="tr_analysis_fix")
-    conclusion = st.text_area("✅ Conclusion", "Trial PASS dengan yield X%.", height=100, key="tr_conc_fix")
-    if st.button("📄 Generate Trial Report FINAL", type="primary", use_container_width=True, key="gen_trial_fix"):
+        st.session_state.trial_manual_data = pd.DataFrame([{"Sample": "S001", "Parameter": "Visual", "Result": "OK", "Notes": ""},{"Sample": "S002", "Parameter": "Visual", "Result": "NG - Flash", "Notes": "Flash di tip"}])
+    edited_trial = st.data_editor(st.session_state.trial_manual_data, num_rows="dynamic", use_container_width=True, key="editor_trial_manual_univ_final")
+    st.session_state.trial_manual_data = edited_trial
+    if st.button("📄 Generate Trial Report FINAL", type="primary", use_container_width=True, key="gen_trial_univ"):
         doc = Document()
-        doc.add_heading(f"TRIAL REPORT", 1).alignment = WD_ALIGN_PARAGRAPH.CENTER
-        doc.add_paragraph(f"Trial No: {trial_no} | Product: {product} | Date: {trial_date} | PIC: {pic}")
-        doc.add_heading("1. Objective", 2); doc.add_paragraph(objective)
-        doc.add_heading("2. Parameters", 2); doc.add_paragraph(parameters)
-        doc.add_heading("3. Method", 2); doc.add_paragraph(method)
-        doc.add_heading("4. Results", 2)
-        if df_result is not None and not df_result.empty:
-            t = doc.add_table(rows=1, cols=len(df_result.columns)); t.style = 'Table Grid'
-            for i, col in enumerate(df_result.columns): t.cell(0,i).text = str(col)
-            for _, row in df_result.iterrows():
-                rw = t.add_row().cells
-                for i, val in enumerate(row): rw[i].text = str(val)
-        doc.add_heading("5. Analysis", 2); doc.add_paragraph(analysis)
-        doc.add_heading("6. Conclusion", 2); doc.add_paragraph(conclusion)
-        bio = io.BytesIO(); doc.save(bio); bio.seek(0)
-        st.download_button("📥 Download Trial Report", data=bio, file_name=f"{trial_no}_Trial_Report.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+        doc.add_heading("TRIAL REPORT", 1)
+        bio = io.BytesIO()
+        doc.save(bio)
+        bio.seek(0)
+        st.download_button("📥 Download Trial Report", data=bio, file_name="Trial_Report.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
 def catalog_reject_tab():
     st.subheader("📚 Catalog Reject Injection - FULL - ISOLATED")
-    os.makedirs("catalog_images", exist_ok=True)
     catalog = [
-        {"name": "SHORT SHOT", "alias": "Isi Tidak Penuh", "level": "CRITICAL", "desc": "Part tidak terisi penuh, ujung tip kosong/patah.", "cause": ["Material kurang", "Suhu barrel rendah", "Injection pressure rendah", "Venting buntu"], "action": ["Cek hopper", "Naikkan temp +10-15C", "Naikkan pressure 5-10%", "Bersihkan venting"], "criteria": "REJECT 100%"},
-        {"name": "FLASH", "alias": "Selaput di parting line", "level": "MAJOR", "desc": "Kelebihan material tipis di sekeliling part.", "cause": ["Clamping kurang", "Mold aus", "Pressure tinggi"], "action": ["Naikkan clamping", "Repair mold", "Turunkan pressure"], "criteria": "REJECT jika >0.1mm"},
-        {"name": "BLACK DOT", "alias": "Titik hitam", "level": "CRITICAL", "desc": "Titik hitam kecil di part clear - defect LV Tips paling sering.", "cause": ["Material kontaminasi", "Barrel kotor", "Purging kurang"], "action": ["Purging 10 shots", "Bersihkan hopper", "Ganti batch"], "criteria": "REJECT 100% LED 6W"},
-        {"name": "BURN MARK", "alias": "Gosong", "level": "CRITICAL", "desc": "Warna coklat/hitam terbakar karena gas terjebak.", "cause": ["Venting buntu", "Speed tinggi", "Suhu tinggi"], "action": ["STOP - Panggil teknisi", "Bersihkan venting", "Turunkan speed 20%"], "criteria": "REJECT 100%"},
-        {"name": "SINK MARK", "alias": "Cekungan", "level": "MINOR-MAJOR", "desc": "Permukaan cekung seperti kawah di area tebal.", "cause": ["Holding kurang", "Cooling kurang"], "action": ["Naikkan holding", "Tambah cooling 2-3 detik"], "criteria": "REJECT jika di sealing"},
+        {"name": "SHORT SHOT", "alias": "Isi Tidak Penuh", "level": "CRITICAL", "desc": "Part tidak terisi penuh.", "criteria": "REJECT 100%"},
+        {"name": "FLASH", "alias": "Selaput di parting line", "level": "MAJOR", "desc": "Kelebihan material tipis.", "criteria": "REJECT jika >0.1mm"},
+        {"name": "BLACK DOT", "alias": "Titik hitam", "level": "CRITICAL", "desc": "Titik hitam kecil di part clear.", "criteria": "REJECT 100% LED 6W"},
+        {"name": "BURN MARK", "alias": "Gosong", "level": "CRITICAL", "desc": "Warna coklat/hitam terbakar.", "criteria": "REJECT 100%"},
+        {"name": "SINK MARK", "alias": "Cekungan", "level": "MINOR-MAJOR", "desc": "Permukaan cekung.", "criteria": "REJECT jika di sealing"},
     ]
-    search = st.text_input("🔍 Cari defect", "", key="cat_search_fix")
+    search = st.text_input("🔍 Cari defect", "", key="cat_search_univ")
     for item in catalog:
         if search and search.lower() not in item["name"].lower(): continue
         with st.expander(f"🔴 {item['name']} - {item['alias']} [{item['level']}]"):
-            c1, c2 = st.columns([1, 1.5])
-            with c1:
-                st.info(f"Contoh: {item['name']}")
-                st.error(f"Kriteria: {item['criteria']}")
-            with c2:
-                st.write(f"**Desc:** {item['desc']}")
-                st.write(f"**Cause:** {', '.join(item['cause'])}")
-                for a in item["action"]: st.write(f"● {a}")
+            st.error(f"Kriteria: {item['criteria']}")
+            st.write(item['desc'])
 
 def dmaic_tab():
-    st.subheader("🌀 DMAIC Generator - Auto Chart - ISOLATED FIX")
+    st.subheader("🌀 DMAIC Generator - UNIVERSAL ALL PROJECT - FINAL")
+    st.caption("Bisa untuk NT8, project lain, Daily, Monthly - tinggal mapping kolom - FIX 0 defect")
     if "dmaic_measure_data" not in st.session_state:
         st.session_state.dmaic_measure_data = pd.DataFrame([
             {"DefectType": "BLACK DOT", "Qty": 45, "Date": "2024-11-01"},
             {"DefectType": "FLASH", "Qty": 30, "Date": "2024-11-01"},
             {"DefectType": "SHORT SHOT", "Qty": 15, "Date": "2024-11-02"},
-            {"DefectType": "SINK MARK", "Qty": 10, "Date": "2024-11-02"},
-            {"DefectType": "BLACK DOT", "Qty": 50, "Date": "2024-11-02"},
-            {"DefectType": "BURN MARK", "Qty": 5, "Date": "2024-11-03"},
         ])
     if "dmaic_ba_data" not in st.session_state:
         st.session_state.dmaic_ba_data = pd.DataFrame([
             {"Phase": "Before", "Defect": "BLACK DOT", "Qty": 45, "Yield": 94.8},
             {"Phase": "After", "Defect": "BLACK DOT", "Qty": 5, "Yield": 98.2},
-            {"Phase": "Before", "Defect": "FLASH", "Qty": 30, "Yield": 94.8},
-            {"Phase": "After", "Defect": "FLASH", "Qty": 8, "Yield": 98.2},
         ])
-    st.markdown("### 1️⃣ D - DEFINE")
-    c1, c2 = st.columns(2)
-    with c1:
-        dmaic_no = st.text_input("DMAIC No", f"DMAIC-{datetime.now().strftime('%Y%m%d')}-001", key="dmaic_no_fix")
-        product = st.text_input("Product / Part", "LV Tips NT8", key="dmaic_prod_fix")
-        issue_type = st.selectbox("Jenis Defect", ["SHORT SHOT", "FLASH / BURR", "BLACK DOT / CONTAMINATION", "BURN MARK", "SINK MARK", "WELD LINE", "SPLAY", "WARPAGE", "Other"], key="dmaic_issue_fix")
-        other_issue = st.text_input("Jika Other, tulis issue", "", key="dmaic_other_fix")
-        problem = st.text_area("Problem Statement", f"Terjadi peningkatan defect {issue_type} di line injection LV Tips.", height=100, key="dmaic_prob_fix")
-    with c2:
-        dmaic_date = st.date_input("Date", datetime.now(), key="dmaic_date_fix")
-        team = st.text_input("Team / PIC", "Quality, Engineering, Production, Mold Maintenance", key="dmaic_team_fix")
-        goal = st.text_area("Goal / Target", "Menurunkan defect rate dari X% menjadi <0.5%", height=80, key="dmaic_goal_fix")
-        scope = st.text_area("Scope", "Line: Injection Machine #3\nMold: 32 cavity", height=100, key="dmaic_scope_fix")
-    final_issue = other_issue if other_issue else issue_type
+    st.markdown("### 2️⃣ M - MEASURE - UNIVERSAL PARSER (ALL PROJECT)")
+    uploaded = st.file_uploader("Upload data defect - SEMUA PROJECT (csv/xlsx 4MB+ ok) - Daily NT8 / Project lain", type=["csv","xlsx","xls"], key="universal_dmaic_upload_final")
+    df_m = st.session_state.dmaic_measure_data
+    if uploaded:
+        try:
+            if uploaded.name.endswith('.csv'):
+                xls_dict = {"CSV": pd.read_csv(uploaded)}
+            else:
+                xls = pd.ExcelFile(uploaded)
+                xls_dict = {name: xls.parse(name) for name in xls.sheet_names}
+            sheet_names = list(xls_dict.keys())
+            selected_sheet = st.selectbox("Pilih Sheet", sheet_names, key="sheet_selector_universal_final")
+            raw_df = xls_dict[selected_sheet].copy()
+            raw_df = raw_df.loc[:, ~raw_df.columns.astype(str).str.contains('^Unnamed')]
+            raw_df = raw_df.dropna(how='all')
+            st.write(f"**Preview Sheet: {selected_sheet} - {raw_df.shape[0]} baris x {raw_df.shape[1]} kolom**")
+            st.dataframe(raw_df.head(15), use_container_width=True)
+            st.divider()
+            st.markdown("#### 🔧 Mapping Kolom - Pilih sesuai file project kamu (BIAR GAK 0 LAGI)")
+            cols = ["-- Tidak Ada / Auto Count --"] + list(raw_df.columns.astype(str))
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                defect_col = st.selectbox("Kolom Jenis Defect / NG", cols, key="map_defect_final")
+            with c2:
+                qty_col = st.selectbox("Kolom Qty / Jumlah (kalau ada)", cols, key="map_qty_final")
+            with c3:
+                status_col = st.selectbox("Kolom Status OK/NG (kalau ada)", cols, key="map_status_final")
+            with c4:
+                date_col = st.selectbox("Kolom Tanggal (opsional)", cols, key="map_date_final")
+            mode = st.radio("Mode Hitung", ["Count NG (hitung baris NG) - UNIVERSAL", "Sum Qty (jumlahkan kolom Qty)", "Auto - Deteksi OK/NG"], horizontal=True, key="mode_universal_final")
+            if st.button("✅ Proses Data Jadi Pareto", type="primary", use_container_width=True, key="proses_universal_final"):
+                processed = pd.DataFrame()
+                try:
+                    if mode == "Sum Qty (jumlahkan kolom Qty)" and qty_col != "-- Tidak Ada / Auto Count --" and defect_col != "-- Tidak Ada / Auto Count --":
+                        raw_df[qty_col] = pd.to_numeric(raw_df[qty_col], errors='coerce').fillna(0)
+                        processed = raw_df.groupby(defect_col)[qty_col].sum().reset_index()
+                        processed.columns = ["DefectType", "Qty"]
+                    elif status_col != "-- Tidak Ada / Auto Count --":
+                        tmp = raw_df.copy()
+                        tmp[status_col] = tmp[status_col].astype(str).str.upper()
+                        ng_df = tmp[tmp[status_col].str.contains("NG|REJECT|N.G|NOT OK|FAIL")]
+                        if defect_col != "-- Tidak Ada / Auto Count --" and not ng_df.empty:
+                            processed = ng_df.groupby(defect_col).size().reset_index(name="Qty")
+                            processed.columns = ["DefectType", "Qty"]
+                        else:
+                            if not ng_df.empty:
+                                processed = pd.DataFrame([{"DefectType": "TOTAL NG", "Qty": len(ng_df)}])
+                    elif defect_col != "-- Tidak Ada / Auto Count --":
+                        filtered = raw_df[raw_df[defect_col].notna()]
+                        filtered = filtered[~filtered[defect_col].astype(str).str.strip().isin(["", "nan", "NaN", "OK", "GOOD"])]
+                        filtered = filtered[~filtered[defect_col].astype(str).str.upper().isin(["OK", "GOOD", "PASS"])]
+                        processed = filtered.groupby(defect_col).size().reset_index(name="Qty")
+                        processed.columns = ["DefectType", "Qty"]
+                        processed = processed[processed["Qty"] > 0]
+                    if not processed.empty:
+                        processed["Date"] = selected_sheet
+                        processed = processed[processed["DefectType"].astype(str).str.strip() != ""]
+                        processed = processed[processed["Qty"] > 0]
+                        st.session_state.dmaic_measure_data = processed
+                        df_m = processed
+                        st.success(f"✅ Berhasil! Total Defect = {int(processed['Qty'].sum())} - Bukan 0 lagi!")
+                        st.dataframe(processed, use_container_width=True)
+                    else:
+                        st.error("Hasil masih 0. Coba ganti kolom Defect atau mode Count NG")
+                except Exception as e:
+                    st.error(f"Error proses: {e}")
+        except Exception as e:
+            st.error(f"Error baca file: {e}")
+    else:
+        edited_m = st.data_editor(st.session_state.dmaic_measure_data, num_rows="dynamic", use_container_width=True, key="editor_dmaic_measure_universal_final2")
+        st.session_state.dmaic_measure_data = edited_m
+        df_m = edited_m
     st.divider()
-    st.markdown("### 2️⃣ M - MEASURE + Auto Pareto 80/20")
-    m_col1, m_col2 = st.columns([1,1])
-    with m_col1:
-        measure_file = st.file_uploader("Upload data defect", type=["csv","xlsx"], key="dmaic_measure_file_fix")
-        if measure_file:
-            df_m = pd.read_csv(measure_file) if measure_file.name.endswith(".csv") else pd.read_excel(measure_file)
-            st.session_state.dmaic_measure_data = df_m
+    if not df_m.empty and "DefectType" in df_m.columns and "Qty" in df_m.columns:
+        total = int(df_m["Qty"].sum())
+        c1, c2 = st.columns(2)
+        c1.metric("Total Defect", total)
+        if total == 0:
+            st.error("Total masih 0 - cek mapping kolom di atas!")
         else:
-            edited_m = st.data_editor(st.session_state.dmaic_measure_data, num_rows="dynamic", use_container_width=True, key="editor_dmaic_measure_fix")
-            st.session_state.dmaic_measure_data = edited_m
-            df_m = edited_m
-        total_defect = df_m["Qty"].sum() if "Qty" in df_m.columns else 0
-        st.metric("Total Defect", total_defect)
-    with m_col2:
-        if not df_m.empty and "DefectType" in df_m.columns and "Qty" in df_m.columns:
+            top = df_m.groupby("DefectType")["Qty"].sum().sort_values(ascending=False).head(1)
+            if not top.empty:
+                c2.metric("Top Defect", f"{top.index[0]} ({top.values[0]})")
             df_pareto = df_m.groupby("DefectType")["Qty"].sum().reset_index().sort_values("Qty", ascending=False)
             df_pareto["Cumulative"] = df_pareto["Qty"].cumsum()
             df_pareto["Cumulative%"] = df_pareto["Cumulative"] / df_pareto["Qty"].sum() * 100
@@ -409,76 +342,10 @@ def dmaic_tab():
             fig_combined.add_trace(go.Bar(x=df_pareto["DefectType"], y=df_pareto["Qty"], name="Qty", marker_color="#ef5350"), secondary_y=False)
             fig_combined.add_trace(go.Scatter(x=df_pareto["DefectType"], y=df_pareto["Cumulative%"], name="Cumulative %", mode="lines+markers", line=dict(color="#1e88e5", width=3)), secondary_y=True)
             fig_combined.add_hline(y=80, line_dash="dash", line_color="green", secondary_y=True)
-            fig_combined.update_layout(title="Pareto 80/20 - Auto")
+            fig_combined.update_layout(title=f"Pareto 80/20 - Total {total} (All Project)")
             st.plotly_chart(fig_combined, use_container_width=True)
-        baseline = st.text_input("Baseline Yield", "Defect 5.2%, Yield 94.8%", key="dmaic_baseline_fix")
-        measurement_method = st.text_area("How we measure", "Visual 100% under LED 6W 580LM, jarak 30cm", height=60, key="dmaic_meas_method_fix")
-    st.divider()
-    st.markdown("### 3️⃣ A - ANALYZE")
-    a1, a2 = st.columns(2)
-    with a1:
-        man = st.text_area("Man", "Operator baru, training kurang", height=60, key="fish_man_fix")
-        machine = st.text_area("Machine", "Nozzle buntu", height=60, key="fish_machine_fix")
-        material = st.text_area("Material", "Material kontaminasi", height=60, key="fish_mat_fix")
-        method = st.text_area("Method", "Purging kurang", height=60, key="fish_method_fix")
-        mold = st.text_area("Mold", "Venting buntu", height=60, key="fish_mold_fix")
-    with a2:
-        why1 = st.text_input("Why 1", f"Kenapa terjadi {final_issue}?", key="why1_fix")
-        ans1 = st.text_input("Answer 1", "Karena material tidak mengisi penuh", key="ans1_fix")
-        why2 = st.text_input("Why 2", "Kenapa bisa begitu?", key="why2_fix")
-        ans2 = st.text_input("Answer 2", "Karena nozzle buntu", key="ans2_fix")
-        why3 = st.text_input("Why 3", "Kenapa bisa begitu?", key="why3_fix")
-        ans3 = st.text_input("Answer 3", "Karena purging kurang", key="ans3_fix")
-        why4 = st.text_input("Why 4", "Kenapa bisa begitu?", key="why4_fix")
-        ans4 = st.text_input("Answer 4", "Tidak ada checklist purging", key="ans4_fix")
-        why5 = st.text_input("Why 5 - ROOT CAUSE", "Root Cause", key="why5_fix")
-        ans5 = st.text_area("Root Cause", "Tidak ada standard purging dan PM venting", height=60, key="ans5_fix")
-    st.divider()
-    st.markdown("### 4️⃣ I - IMPROVE + Auto Before-After Chart")
-    i1, i2 = st.columns(2)
-    with i1:
-        improve_action = st.data_editor(pd.DataFrame([
-            {"No": 1, "Action": "Purging standard 10 shots", "PIC": "Production", "Due": "Immediate", "Status": "Done"},
-            {"No": 2, "Action": "Bersihkan venting mold", "PIC": "Mold Maint", "Due": "2 hari", "Status": "On Progress"},
-            {"No": 3, "Action": "Checklist drying <0.02%", "PIC": "Quality", "Due": "3 hari", "Status": "Plan"},
-            {"No": 4, "Action": "Training parameter standard", "PIC": "Engineering", "Due": "1 minggu", "Status": "Plan"},
-        ]), num_rows="dynamic", use_container_width=True, key="improve_table_fix")
-        edited_ba = st.data_editor(st.session_state.dmaic_ba_data, num_rows="dynamic", use_container_width=True, key="editor_ba_fix")
-        st.session_state.dmaic_ba_data = edited_ba
-        before_after = edited_ba
-    with i2:
-        if not before_after.empty:
-            fig_ba = px.bar(before_after, x="Defect", y="Qty", color="Phase", barmode="group", title="Before vs After", color_discrete_map={"Before": "#ef5350", "After": "#66bb6a"})
-            st.plotly_chart(fig_ba, use_container_width=True)
-            before_total = before_after[before_after["Phase"]=="Before"]["Qty"].sum()
-            after_total = before_after[before_after["Phase"]=="After"]["Qty"].sum()
-            if before_total > 0:
-                imp_pct = (before_total - after_total) / before_total * 100
-                st.success(f"🚀 Improvement: {imp_pct:.1f}%")
-        improve_result = st.text_area("Hasil Improvement", "Defect BLACK DOT turun 89%", height=100, key="improve_result_fix")
-        cost = st.text_input("Cost / Benefit", "Cost: Purging 2kg", key="improve_cost_fix")
-    st.divider()
-    st.markdown("### 5️⃣ C - CONTROL")
-    c_c1, c_c2 = st.columns(2)
-    with c_c1:
-        control_plan = st.text_area("Control Plan", "1. Checklist purging wajib", height=120, key="control_plan_fix")
-        monitoring = st.text_area("Monitoring", "Dashboard harian", height=80, key="control_monitor_fix")
-    with c_c2:
-        standardization = st.text_area("Standardization", "Update WI: WI-INJ-003 Rev 2", height=120, key="control_std_fix")
-        lesson = st.text_area("Lesson Learned", "Pentingnya purging standard", height=80, key="control_lesson_fix")
-    if st.button("📄 Generate DMAIC Report", type="primary", use_container_width=True, key="gen_dmaic_fix"):
-        doc = Document()
-        h = doc.add_heading(f"DMAIC REPORT - {final_issue}", 1); h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        doc.add_paragraph(f"DMAIC No: {dmaic_no} | Product: {product} | Date: {dmaic_date} | Team: {team}")
-        doc.add_heading("1. DEFINE", 2); doc.add_paragraph(f"Problem: {problem}\nGoal: {goal}\nScope: {scope}\nBaseline: {baseline}")
-        doc.add_heading("2. MEASURE", 2); doc.add_paragraph(f"Method: {measurement_method}")
-        doc.add_heading("3. ANALYZE", 2); doc.add_paragraph(f"Man: {man}\nMachine: {machine}\nMaterial: {material}\nMethod: {method}\nMold: {mold}\n{why1}: {ans1}\n{why5}: {ans5}")
-        doc.add_heading("4. IMPROVE", 2); doc.add_paragraph(f"Result: {improve_result}\nCost: {cost}")
-        doc.add_heading("5. CONTROL", 2); doc.add_paragraph(f"Control: {control_plan}\nMonitoring: {monitoring}\nStandardization: {standardization}\nLesson: {lesson}")
-        bio = io.BytesIO(); doc.save(bio); bio.seek(0)
-        st.download_button("📥 Download DMAIC Report", data=bio, file_name=f"{dmaic_no}_{final_issue}_DMAIC.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
-st.title("📊 Quality AI PRO - 6 Modules Auto Chart - FULL FIXED")
+st.title("📊 Quality AI PRO - 6 Modules Auto Chart - FINAL UNIVERSAL")
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 MSA", "📄 WI Generator", "🖼️ Screenshot Compare", "🧪 Trial Report", "📚 Catalog Reject", "🌀 DMAIC Auto Chart"])
 with tab1:
     msa_tab()
