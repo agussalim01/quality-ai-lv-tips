@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-st.set_page_config(page_title="Quality AI PRO - 7 Modules FINAL FIX", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Quality AI PRO - 7 Modules AUTO DETECT", page_icon="📊", layout="wide")
 
 def create_wi_final(template_path_or_file, doc_no, product, temp_no, rev, proc, part_req, tools_req, time_df, steps_text):
     doc = Document(template_path_or_file)
@@ -92,84 +92,202 @@ def create_side_screenshot(old_list, new_list, output_path="/tmp/side_by_side.pn
     img.save(output_path); return output_path
 
 def msa_tab():
-    st.subheader("📊 MSA Variabel [FIX FINAL]")
-    uploaded=st.file_uploader("Upload Data MSA (.csv)",type=["csv"],key="msa_upload")
+    st.subheader("📊 MSA - AUTO DETECT Variabel & Attribute [FIX UNTUK FILE KAMU]")
+    st.caption("File kamu GRNR...SA FL.csv = Attribute Gage R&R (NG/G) - Akan auto convert")
+    uploaded=st.file_uploader("Upload Data MSA (.csv)",type=["csv"],key="msa_upload_final")
     try:
-        if uploaded:
-            df=pd.read_csv(uploaded, encoding='utf-8-sig'); df.columns=[c.strip().replace('\ufeff','') for c in df.columns]
+        if not uploaded:
+            df=pd.DataFrame({"Part":[1,1,1,2,2,2,3,3,3]*3,"Operator":["A"]*9+["B"]*9+["C"]*9,"Measurement":[10.1,10.12,10.11,10.2,10.22,10.21,10.0,10.02,10.01,10.11,10.13,10.12,10.21,10.23,10.22,10.01,10.03,10.02,10.09,10.11,10.10,10.19,10.21,10.20,9.99,10.01,10.0]})
+            st.dataframe(df.head(10),use_container_width=True)
+            st.info("Upload file GRNR Ji...SA FL.csv kamu di sini")
+            return
+        
+        # Cek apakah file Attribute
+        raw_preview = pd.read_csv(uploaded, header=None, encoding='utf-8-sig', nrows=15).astype(str)
+        raw_text = " ".join(raw_preview.values.flatten()).upper()
+        is_attribute = "ATTRIBUTE GAGE" in raw_text or "KNOWN POPULATION" in raw_text or "TRIAL #1" in raw_text or "SAMPLE #" in raw_text
+        
+        uploaded.seek(0)
+        
+        if is_attribute:
+            st.info("🔍 Terdeteksi format Attribute Gage R&R - Convert...")
+            df_raw = pd.read_csv(uploaded, header=None, encoding='utf-8-sig')
+            # Cari baris header Sample #
+            header_row_idx = 0
+            for i, row in df_raw.iterrows():
+                row_str = " ".join([str(x).upper() for x in row.values if pd.notna(x)])
+                if "SAMPLE" in row_str and ("ATTRIBUTE" in row_str or "KNOWN" in row_str or "TRIAL" in row_str):
+                    header_row_idx = i
+                    break
+            
+            # Ambil nama operator dari baris sebelumnya
+            operator_names = []
+            if header_row_idx>0:
+                op_row = df_raw.iloc[header_row_idx-1].tolist()
+                # Baris Known Population biasanya: None, Known Population, None, PE, None, Intern...
+                # Kita ambil yang bukan None
+                for x in op_row:
+                    xs = str(x).strip()
+                    if xs.lower() not in ['none','nan','','known population'] and len(xs)>1:
+                        operator_names.append(xs)
+            if not operator_names:
+                # Cari baris lagi
+                for i in range(max(0, header_row_idx-2), header_row_idx):
+                    row = df_raw.iloc[i].tolist()
+                    for x in row:
+                        xs = str(x).strip()
+                        if xs.upper() in ['PE','INTERN','OPERATOR A','OPERATOR B','QA','QC','APPRAISER']:
+                            if xs not in operator_names: operator_names.append(xs)
+            if not operator_names:
+                operator_names = ["PE","Intern"]
+            
+            st.write(f"Operator terdeteksi: {operator_names}")
+            
+            # Header dan data
+            header = df_raw.iloc[header_row_idx].tolist()
+            data_rows = df_raw.iloc[header_row_idx+1:].reset_index(drop=True)
+            
+            long_rows=[]
+            for _, row in data_rows.iterrows():
+                try:
+                    # Row format: None, Sample#, Attribute, Trial#1, Trial#2, Trial#1, Trial#2...
+                    # Bersihkan
+                    row_vals = [str(x).strip() if pd.notna(x) else "" for x in row.tolist()]
+                    # Sample number biasanya di index 1
+                    sample = ""
+                    attr = ""
+                    for idx, v in enumerate(row_vals):
+                        if v.isdigit() or (v.replace('.','',1).isdigit()):
+                            if not sample: sample = v
+                        if v.upper() in ['NG','G','OK','A','R']:
+                            if not attr: attr = v
+                            break
+                    # Lebih robust: ambil kolom 1 dan 2
+                    if len(row_vals)>=3:
+                        if row_vals[1] and row_vals[1].lower() not in ['none','nan','']:
+                            sample = row_vals[1]
+                        if len(row_vals)>=3 and row_vals[2] and row_vals[2].lower() not in ['none','nan','']:
+                            attr = row_vals[2]
+                    
+                    if not sample or not attr or attr.lower() in ['none','nan','']: continue
+                    if sample.lower() in ['none','nan','']: continue
+                    
+                    std_map = {"G":"OK", "NG":"NG", "OK":"OK", "A":"OK", "R":"NG"}
+                    std_std = std_map.get(attr.upper(), attr.upper())
+                    if std_std not in ["OK","NG"]: continue
+                    
+                    # Trials mulai dari kolom 3
+                    col_idx = 3
+                    op_idx = 0
+                    while col_idx < len(row_vals):
+                        val = row_vals[col_idx].strip().upper()
+                        if val in ['G','NG','OK','A','R']:
+                            op_name = operator_names[op_idx//2] if op_idx//2 < len(operator_names) else f"Op{op_idx//2+1}"
+                            trial_no = (op_idx%2)+1
+                            res = std_map.get(val, val)
+                            if res in ["OK","NG"]:
+                                long_rows.append({"Part": f"P-{sample}", "Operator": op_name, "Trial": trial_no, "Result": res, "Standard": std_std, "Defect": ""})
+                            op_idx+=1
+                        elif val not in ['', 'NONE','NAN']:
+                            # Tetap hitung sebagai trial walau kosong
+                            pass
+                        col_idx+=1
+                        # Safety break
+                        if op_idx > 20: break
+                except Exception as ex:
+                    continue
+            
+            df_converted = pd.DataFrame(long_rows)
+            if df_converted.empty:
+                st.error("Gagal convert! Cek format file. Coba upload di tab AAA Visual dengan format Part,Operator,Result,Standard")
+                st.dataframe(df_raw.head(10), use_container_width=True)
+                return
+            
+            st.success(f"✅ Convert OK: {len(df_converted)} inspeksi, {df_converted['Part'].nunique()} part, {df_converted['Operator'].nunique()} operator")
+            st.dataframe(df_converted.head(20), use_container_width=True)
+            
+            total=len(df_converted)
+            df_converted["Result"]=df_converted["Result"].astype(str).str.upper()
+            df_converted["Standard"]=df_converted["Standard"].astype(str).str.upper()
+            accuracy=(df_converted["Result"]==df_converted["Standard"]).sum()/total*100 if total>0 else 0
+            
+            c1,c2,c3=st.columns(3)
+            c1.metric("Total Inspeksi", total)
+            c2.metric("Accuracy vs Known", f"{accuracy:.1f}%")
+            c3.metric("Mismatch", f"{100-accuracy:.1f}%")
+            
+            if accuracy>=90: st.success("✅ LULUS Attribute Gage R&R")
+            elif accuracy>=80: st.warning("⚠️ MARGINAL")
+            else: st.error("❌ GAGAL")
+            
+            # Pareto mismatch
+            df_miss=df_converted[df_converted["Result"]!=df_converted["Standard"]]
+            if not df_miss.empty:
+                st.write("**Detail Miss:**")
+                st.dataframe(df_miss, use_container_width=True)
+                fig=px.bar(df_miss.groupby(["Part","Standard","Operator"]).size().reset_index(name="Miss Count"), x="Part", y="Miss Count", color="Operator", title="Miss per Part")
+                st.plotly_chart(fig, use_container_width=True)
+            
+            st.session_state['aaa_from_msa'] = df_converted
+            return
+        else:
+            # Variabel
+            uploaded.seek(0)
+            df=pd.read_csv(uploaded, encoding='utf-8-sig')
+            df.columns=[c.strip().replace('\ufeff','') for c in df.columns]
             col_map={c.lower():c for c in df.columns}
             if 'measurement' in col_map and 'Measurement' not in df.columns: df.rename(columns={col_map['measurement']:'Measurement'},inplace=True)
             if 'operator' in col_map and 'Operator' not in df.columns: df.rename(columns={col_map['operator']:'Operator'},inplace=True)
             df=df.dropna(how='all')
-        else:
-            df=pd.DataFrame({"Part":[1,1,1,2,2,2,3,3,3]*3,"Operator":["A"]*9+["B"]*9+["C"]*9,"Measurement":[10.1,10.12,10.11,10.2,10.22,10.21,10.0,10.02,10.01,10.11,10.13,10.12,10.21,10.23,10.22,10.01,10.03,10.02,10.09,10.11,10.10,10.19,10.21,10.20,9.99,10.01,10.0]})
-        if df.empty: st.error("File kosong!"); return
-        c1,c2=st.columns(2)
-        with c1: st.dataframe(df.head(20),use_container_width=True); st.caption(f"Rows: {len(df)} | Cols: {list(df.columns)}")
-        with c2:
+            if df.empty: st.error("File kosong"); return
+            st.dataframe(df.head(20),use_container_width=True)
             if "Measurement" in df.columns and "Operator" in df.columns:
                 df["Measurement"]=pd.to_numeric(df["Measurement"],errors='coerce'); df_clean=df.dropna(subset=["Measurement"])
                 if not df_clean.empty:
-                    fig=px.histogram(df_clean,x="Measurement",color="Operator",title="MSA Distribution FIX"); st.plotly_chart(fig,use_container_width=True)
-            else: st.warning(f"Harus ada Measurement & Operator. Kolom: {list(df.columns)}")
-    except Exception as e: st.error(f"Error: {e}")
+                    fig=px.histogram(df_clean,x="Measurement",color="Operator",title="MSA Distribution"); st.plotly_chart(fig,use_container_width=True)
+            else: st.warning(f"Butuh Measurement & Operator. Kolom: {list(df.columns)}")
+    except Exception as e:
+        st.error(f"Error: {e}")
+        import traceback; st.code(traceback.format_exc())
 
 def aaa_visual_tab():
     st.subheader("👁️ AAA Visual - FINAL FIX Anti 'Part' Error")
-    st.caption("Format wajib: Part,Operator,Trial,Result,Standard,Defect")
-    aaa_file=st.file_uploader("Upload CSV AAA",type=["csv","xlsx"],key="aaa_file_final")
-    df_aaa=pd.DataFrame()
+    st.caption("Format: Part,Operator,Trial,Result,Standard,Defect")
+    # Jika ada data dari MSA tab
+    if 'aaa_from_msa' in st.session_state and not st.session_state['aaa_from_msa'].empty:
+        st.info("📥 Data dari tab MSA Attribute terdeteksi, pakai itu?")
+        if st.checkbox("Pakai data dari MSA Tab", value=True):
+            df_aaa = st.session_state['aaa_from_msa']
+        else:
+            df_aaa = pd.DataFrame()
+    else:
+        df_aaa = pd.DataFrame()
+    
+    aaa_file=st.file_uploader("Upload CSV AAA (opsional kalau sudah ada dari MSA)",type=["csv","xlsx"],key="aaa_file_final")
     try:
         if aaa_file:
-            if aaa_file.name.endswith(".csv"):
-                df_aaa=pd.read_csv(aaa_file, encoding='utf-8-sig')
+            if aaa_file.name.endswith(".csv"): df_aaa=pd.read_csv(aaa_file, encoding='utf-8-sig')
             else:
-                try:
-                    df_aaa=pd.read_excel(aaa_file)
-                except ImportError:
-                    st.error("⚠️ .xlsx butuh openpyxl. Pakai CSV dulu atau push requirements.txt")
-                    st.info("File > Save As > CSV"); df_aaa=pd.DataFrame()
+                try: df_aaa=pd.read_excel(aaa_file)
+                except ImportError: st.error("Butuh openpyxl, pakai CSV dulu"); df_aaa=pd.DataFrame()
             if not df_aaa.empty:
-                df_aaa.columns=[str(c).strip().replace('\ufeff','').replace('\n','').replace('\r','') for c in df_aaa.columns]
+                df_aaa.columns=[str(c).strip().replace('\ufeff','') for c in df_aaa.columns]
                 lower_map={str(c).lower():c for c in df_aaa.columns}
                 rename_dict={}
-                if 'part' in lower_map: rename_dict[lower_map['part']]='Part'
-                if 'operator' in lower_map: rename_dict[lower_map['operator']]='Operator'
-                if 'result' in lower_map: rename_dict[lower_map['result']]='Result'
-                if 'standard' in lower_map: rename_dict[lower_map['standard']]='Standard'
-                if 'trial' in lower_map: rename_dict[lower_map['trial']]='Trial'
-                if 'defect' in lower_map: rename_dict[lower_map['defect']]='Defect'
+                for k in ['part','operator','result','standard','trial','defect']:
+                    if k in lower_map: rename_dict[lower_map[k]]=k.capitalize()
                 df_aaa.rename(columns=rename_dict,inplace=True)
-                df_aaa=df_aaa.dropna(how='all')
-        else:
-            df_aaa=pd.DataFrame([
-                {"Part":"P01","Operator":"A","Trial":1,"Result":"NG","Standard":"NG","Defect":"BLACK DOT"},
-                {"Part":"P01","Operator":"A","Trial":2,"Result":"NG","Standard":"NG","Defect":"BLACK DOT"},
-                {"Part":"P01","Operator":"B","Trial":1,"Result":"NG","Standard":"NG","Defect":"BLACK DOT"},
-                {"Part":"P01","Operator":"B","Trial":2,"Result":"OK","Standard":"NG","Defect":"BLACK DOT"},
-                {"Part":"P02","Operator":"A","Trial":1,"Result":"OK","Standard":"OK","Defect":""},
-                {"Part":"P02","Operator":"B","Trial":1,"Result":"OK","Standard":"OK","Defect":""},
-            ])
-        
         if df_aaa.empty:
-            st.info("Upload CSV dulu atau pakai data contoh di bawah"); df_aaa=st.data_editor(pd.DataFrame([
-                {"Part":"P01","Operator":"A","Trial":1,"Result":"NG","Standard":"NG","Defect":"BLACK DOT"},
-                {"Part":"P01","Operator":"B","Trial":1,"Result":"OK","Standard":"NG","Defect":"BLACK DOT"},
-            ]), num_rows="dynamic", use_container_width=True, key="aaa_edit_final")
-        else:
-            st.success(f"Kolom terbaca: {list(df_aaa.columns)} - Total {len(df_aaa)} rows")
-            df_aaa=st.data_editor(df_aaa, num_rows="dynamic", use_container_width=True, key="aaa_edit_main", height=350)
+            df_aaa=pd.DataFrame([{"Part":"P01","Operator":"A","Trial":1,"Result":"NG","Standard":"NG","Defect":"BLACK DOT"},{"Part":"P01","Operator":"B","Trial":1,"Result":"OK","Standard":"NG","Defect":"BLACK DOT"}])
+        
+        st.success(f"Kolom: {list(df_aaa.columns)} - {len(df_aaa)} rows")
+        df_aaa=st.data_editor(df_aaa, num_rows="dynamic", use_container_width=True, key="aaa_edit_main", height=350)
         
         if df_aaa.empty: return
-        
-        # Validasi
         for col in ["Part","Operator","Result","Standard"]:
             if col not in df_aaa.columns:
-                st.error(f"❌ Kolom '{col}' tidak ditemukan! Kolom kamu: {list(df_aaa.columns)}")
-                st.code("Part,Operator,Trial,Result,Standard,Defect\nP01,A,1,NG,NG,BLACK DOT")
-                return
+                st.error(f"Kolom '{col}' tidak ada!"); return
         
-        # Hitung
         df_aaa["Result"]=df_aaa["Result"].astype(str).str.upper().str.strip()
         df_aaa["Standard"]=df_aaa["Standard"].astype(str).str.upper().str.strip()
         df_aaa["Part"]=df_aaa["Part"].astype(str).str.strip()
@@ -178,11 +296,9 @@ def aaa_visual_tab():
         total=len(df_aaa)
         repeat_scores=[]
         for (part, op), group in df_aaa.groupby(["Part","Operator"]):
-            if len(group)>1:
-                repeat_scores.append(1 if group["Result"].nunique()==1 else 0)
+            if len(group)>1: repeat_scores.append(1 if group["Result"].nunique()==1 else 0)
         repeat_pct=(sum(repeat_scores)/len(repeat_scores)*100) if repeat_scores else 100.0
         accuracy=(df_aaa["Result"]==df_aaa["Standard"]).sum()/total*100 if total>0 else 0
-        
         inter_agree=[]
         for part, group in df_aaa.groupby("Part"):
             try:
@@ -191,38 +307,12 @@ def aaa_visual_tab():
             except: inter_agree.append(0)
         inter_pct=(sum(inter_agree)/len(inter_agree)*100) if inter_agree else 0
         
-        c1,c2,c3=st.columns(3)
-        c1.metric("Repeatability",f"{repeat_pct:.1f}%"); c2.metric("Inter-Operator",f"{inter_pct:.1f}%"); c3.metric("Accuracy vs Std",f"{accuracy:.1f}%")
-        
-        if accuracy>=90 and repeat_pct>=90 and inter_pct>=90: st.success("✅ LULUS - Sistem visual OK")
-        elif accuracy>=80: st.warning("⚠️ MARGINAL - Perlu training")
+        c1,c2,c3=st.columns(3); c1.metric("Repeatability",f"{repeat_pct:.1f}%"); c2.metric("Inter-Operator",f"{inter_pct:.1f}%"); c3.metric("Accuracy",f"{accuracy:.1f}%")
+        if accuracy>=90 and repeat_pct>=90 and inter_pct>=90: st.success("✅ LULUS")
+        elif accuracy>=80: st.warning("⚠️ MARGINAL")
         else: st.error("❌ GAGAL")
-        
-        if "Defect" in df_aaa.columns:
-            df_miss=df_aaa[df_aaa["Result"]!=df_aaa["Standard"]]
-            if not df_miss.empty and "Defect" in df_miss.columns:
-                try:
-                    fig_miss=px.bar(df_miss.groupby("Defect").size().reset_index(name="Miss"), x="Defect", y="Miss", title="Defect Sering Miss")
-                    st.plotly_chart(fig_miss, use_container_width=True)
-                except: pass
-        
-        st.divider()
-        for op in df_aaa["Operator"].unique():
-            df_op=df_aaa[df_aaa["Operator"]==op]; acc=(df_op["Result"]==df_op["Standard"]).mean()*100
-            with st.expander(f"Operator {op} - {acc:.1f}%"):
-                st.dataframe(df_op, use_container_width=True)
-                false_ok=df_op[(df_op["Result"]=="OK") & (df_op["Standard"]=="NG")]
-                if not false_ok.empty: st.error(f"False OK (Lolos): {len(false_ok)} BAHAYA! Part: {false_ok['Part'].tolist()}")
-        
-        if st.button("📄 Generate AAA Report", type="primary", use_container_width=True):
-            doc=Document(); doc.add_heading("AAA REPORT - VISUAL",1).alignment=WD_ALIGN_PARAGRAPH.CENTER
-            doc.add_paragraph(f"Date: {datetime.now().strftime('%d/%m/%Y')} | Total: {len(df_aaa)} | Accuracy: {accuracy:.1f}%")
-            bio=io.BytesIO(); doc.save(bio); bio.seek(0)
-            st.download_button("📥 Download AAA Report", data=bio, file_name=f"AAA_{datetime.now().strftime('%Y%m%d')}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
-            
     except Exception as e:
-        st.error(f"Error hitung AAA: {e}")
-        import traceback; st.code(traceback.format_exc())
+        st.error(f"Error AAA: {e}"); import traceback; st.code(traceback.format_exc())
 
 def comparator_tab():
     st.subheader("🖼️ Screenshot Kiri Kanan")
@@ -249,7 +339,6 @@ def wi_tab():
         temp_no=st.text_input("Temp Number","TMP-11-001-0002 rev.1",key="wi_temp"); rev=st.text_input("Rev","0",key="wi_rev"); proc=st.text_input("Process Desc","QC 100% Visual Inspection LV Tips",key="wi_proc")
     with c2:
         part_req=st.text_area("Part Required","1 batch LV Tips after cutting",height=80,key="wi_part"); tools_req=st.text_area("Tools Required","Lampu LED 6 watt 580 LM\nTatakan LV tips\nPinset\nIonizer",height=120,key="wi_tools")
-    st.write("**Time Table**")
     time_df=st.data_editor(pd.DataFrame([{"step":"Step 1 :  Susun Tips","time":10},{"step":"Step 2 :  Check visual defect","time":80},{"step":"Step 3 :  Data Tips OK dan Tips Reject","time":5},{"step":"Step 4 :  Packing LV Tips","time":5},{"step":"Step 5 : Manual Filling Process","time":30},{"step":"Step 6 : 2nd Visual Check","time":5},{"step":"Step 7 : Ionizer","time":5}]),num_rows="dynamic",use_container_width=True,key="time_editor")
     raw=st.text_area("Detail Langkah Kerja","Step 1 :  Susun Tips\nSusun LV tips di atas tatakan\n\nStep 2 :  Check visual defect\nCek dengan lampu LED 30cm",height=200,key="wi_raw")
     if st.button("✨ Generate WI FINAL",type="primary",use_container_width=True):
@@ -262,7 +351,7 @@ def trial_report_tab():
     c1,c2=st.columns(2)
     with c1: trial_no=st.text_input("Trial No","TR-2024-001",key="tr_no"); product=st.text_input("Product","NT8",key="tr_prod"); trial_date=st.date_input("Trial Date",datetime.now(),key="tr_date"); pic=st.text_input("PIC","",key="tr_pic"); objective=st.text_area("Objective","Validasi proses baru",height=100,key="tr_obj")
     with c2: parameters=st.text_area("Parameter Trial","1. Suhu: 25C\n2. Speed: 100rpm",height=100,key="tr_param"); method=st.text_area("Method","1. Siapkan 100 pcs\n2. Running QC",height=100,key="tr_method")
-    st.divider(); data_file=st.file_uploader("Upload hasil trial",type=["csv","xlsx"],key="trial_data")
+    data_file=st.file_uploader("Upload hasil trial",type=["csv","xlsx"],key="trial_data")
     if data_file:
         if data_file.name.endswith(".csv"): df_result=pd.read_csv(data_file, encoding='utf-8-sig')
         else:
@@ -287,7 +376,6 @@ def dmaic_tab():
     c1,c2=st.columns(2)
     with c1: dmaic_no=st.text_input("DMAIC No",f"DMAIC-{datetime.now().strftime('%Y%m%d')}-001",key="dmaic_no"); product=st.text_input("Product / Part","LV Tips NT8",key="dmaic_prod"); issue_type=st.selectbox("Jenis Defect",["BLACK DOT","FLASH","SHORT SHOT","Other"],key="dmaic_issue")
     with c2: dmaic_date=st.date_input("Date",datetime.now(),key="dmaic_date"); team=st.text_input("Team / PIC","Quality, Engineering",key="dmaic_team")
-    st.divider(); st.markdown("### 2️⃣ M - MEASURE")
     measure_file=st.file_uploader("Upload data defect (.csv / .xlsx) - DefectType,Qty",type=["csv","xlsx"],key="dmaic_measure_file")
     try:
         if measure_file:
@@ -307,9 +395,9 @@ def dmaic_tab():
                 fig_combined.update_layout(title="Pareto 80/20"); st.plotly_chart(fig_combined,use_container_width=True)
     except Exception as e: st.warning(f"Chart error: {e}")
 
-# ================= MAIN =================
-st.title("📊 Quality AI PRO - 7 Modules FINAL FIX")
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📊 MSA Variabel","👁️ AAA Visual","📄 WI Generator","🖼️ Screenshot Compare","🧪 Trial Report","📚 Catalog Reject","🌀 DMAIC Auto Chart"])
+# MAIN
+st.title("📊 Quality AI PRO - AUTO DETECT ATTRIBUTE")
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📊 MSA AUTO","👁️ AAA Visual","📄 WI Generator","🖼️ Screenshot Compare","🧪 Trial Report","📚 Catalog Reject","🌀 DMAIC Auto Chart"])
 with tab1: msa_tab()
 with tab2: aaa_visual_tab()
 with tab3: wi_tab()
