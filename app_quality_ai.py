@@ -13,33 +13,46 @@ from datetime import datetime
 
 st.set_page_config(page_title="Quality AI PRO + Comparator", page_icon="🔍", layout="wide")
 
-# ================= HELPER =================
-def extract_all_text(docx_file):
+# ================= HELPER FILTERED =================
+def extract_all_text_filtered(docx_file):
     doc = Document(docx_file)
     texts = []
+    ignore_keywords = ["department", "verified by", "approval document", "approved by", "fusa rnd", "tiga workflow", "history", "revision", "date", "description"]
     for p in doc.paragraphs:
         t = p.text.strip()
-        if t and len(t) > 2:
+        if t and len(t) > 3:
+            if any(k in t.lower() for k in ignore_keywords):
+                continue
+            if len(t) < 15 and ("WIN-" in t or "TMP-" in t):
+                continue
             texts.append(t)
     for tbl in doc.tables:
-        for row in tbl.rows:
-            for cell in row.cells:
-                t = cell.text.strip()
-                if t and len(t) > 1:
-                    texts.append(t)
+        if not tbl.rows:
+            continue
+        first_cell = tbl.cell(0,0).text.lower() if tbl.rows else ""
+        # Hanya ambil table Langkah Kerja, bukan table approval
+        if "langkah kerja" in first_cell or "step" in first_cell.lower():
+            for row in tbl.rows[1:]:
+                for cell in row.cells:
+                    t = cell.text.strip()
+                    if t and not any(k in t.lower() for k in ignore_keywords):
+                        texts.append(t)
     return texts
 
-def parse_steps(text_list):
+def parse_steps_filtered(text_list):
     full_text = "\n".join(text_list)
     pattern = r"(Step\s*\d+\s*:.*?(?=Step\s*\d+\s*:|$))"
     matches = re.findall(pattern, full_text, flags=re.I | re.S)
     steps = {}
     for content in matches:
         content = content.strip()
+        if len(content) < 10:
+            continue
         m = re.search(r"Step\s*(\d+)", content, re.I)
         if m:
             key = f"Step {m.group(1)}"
-            bullets = [b.strip() for b in re.split(r'\n|●|•', content) if b.strip()]
+            bullets = [b.strip() for b in re.split(r'\n|●|•', content) if b.strip() and len(b.strip())>3]
+            bullets = [b for b in bullets if not any(k in b.lower() for k in ["department","verified","approval","approved by","fusa","tiga workflow"])]
             steps[key] = {"full": content, "bullets": bullets}
     return steps
 
@@ -179,53 +192,108 @@ def create_redline_docx(old_steps, new_steps):
         doc.add_paragraph("Tidak ada perubahan - 100% identik")
     return doc, changed
 
+def create_diff_image(old_steps, new_steps):
+    from PIL import Image, ImageDraw
+    W, H = 1000, 1600
+    img = Image.new("RGB", (W, H), "white")
+    draw = ImageDraw.Draw(img)
+    y = 20
+    draw.text((20, y), "PERBANDINGAN WI - Point Berubah", fill="black")
+    y += 50
+    all_keys = sorted(set(list(old_steps.keys()) + list(new_steps.keys())), key=lambda x: int(re.search(r'\d+', x).group()) if re.search(r'\d+', x) else 999)
+    for k in all_keys:
+        old = old_steps.get(k)
+        new = new_steps.get(k)
+        if old and new and old["full"].strip() != new["full"].strip():
+            old_b = set(old["bullets"]) - set(new["bullets"])
+            new_b = set(new["bullets"]) - set(old["bullets"])
+            if old_b or new_b:
+                draw.rectangle([10, y, W-10, y+35], fill="#FFF9C4")
+                draw.text((20, y+8), f"{k} - BERUBAH", fill="black")
+                y += 45
+                for b in old_b:
+                    if len(b)>4:
+                        draw.rectangle([20, y, W-20, y+30], fill="#FFCDD2")
+                        draw.text((30, y+6), f"- {b[:85]}", fill="#B71C1C")
+                        y += 35
+                for b in new_b:
+                    if len(b)>4:
+                        draw.rectangle([20, y, W-20, y+30], fill="#C8E6C9")
+                        draw.text((30, y+6), f"+ {b[:85]}", fill="#1B5E20")
+                        y += 35
+                y += 15
+    bio = io.BytesIO()
+    img.save(bio, format="PNG")
+    bio.seek(0)
+    return bio
+
 # ================= TABS =================
 def comparator_tab():
-    st.subheader("🔍 WI Comparator - Jadi File .DOCX Langsung")
+    st.subheader("🔍 WI Comparator - Tampil Langsung Gambar + Docs")
     c1, c2 = st.columns(2)
     with c1:
         old_file = st.file_uploader("📂 WI LAMA (Rev 0)", type=["docx"], key="old_wi")
     with c2:
         new_file = st.file_uploader("📂 WI BARU (Rev 1)", type=["docx"], key="new_wi")
     if old_file and new_file:
-        old_texts = extract_all_text(old_file)
-        new_texts = extract_all_text(new_file)
-        old_steps = parse_steps(old_texts)
-        new_steps = parse_steps(new_texts)
+        old_texts = extract_all_text_filtered(old_file)
+        new_texts = extract_all_text_filtered(new_file)
+        old_steps = parse_steps_filtered(old_texts)
+        new_steps = parse_steps_filtered(new_texts)
         sim = difflib.SequenceMatcher(None, old_texts, new_texts).ratio()*100
-        st.metric("Kemiripan Total", f"{sim:.1f}%")
+        st.metric("Kemiripan (Isi Kerja Saja, Approval Diabaikan)", f"{sim:.1f}%")
+        
+        # Gambar preview
+        img_bio = create_diff_image(old_steps, new_steps)
         st.divider()
-        st.subheader("🎯 Preview - Point Yang Berubah")
+        st.subheader("🖼️ Preview Gambar (Screenshot Otomatis)")
+        st.image(img_bio, caption="Merah = Dihapus, Hijau = Baru", use_container_width=True)
+        
+        # Preview HTML
+        st.subheader("📄 Preview Dokumen - Point Berubah")
+        has_change = False
         for k in sorted(set(list(old_steps.keys()) + list(new_steps.keys())), key=lambda x: int(re.search(r'\d+', x).group()) if re.search(r'\d+', x) else 999):
             old = old_steps.get(k)
             new = new_steps.get(k)
             if not old and new:
-                st.success(f"✅ {k} - BARU")
+                has_change = True
+                st.success(f"✅ {k} BARU DITAMBAHKAN")
+                st.markdown(f"<div style='background:#e8f5e9;border-left:5px solid green;padding:10px'>{new['full']}</div>", unsafe_allow_html=True)
             elif old and not new:
-                st.error(f"❌ {k} - DIHAPUS")
+                has_change = True
+                st.error(f"❌ {k} DIHAPUS")
             elif old and new and old["full"].strip() != new["full"].strip():
-                old_b = set(old["bullets"])
-                new_b = set(new["bullets"])
-                if (old_b - new_b) or (new_b - old_b):
-                    st.warning(f"⚠️ {k} - BERUBAH")
-                    colL, colR = st.columns(2)
-                    with colL:
-                        for b in (old_b - new_b):
-                            if len(b) > 4:
-                                st.markdown(f"<div style='background:#ffcccc;padding:4px;margin:2px;border-radius:4px'>- {b}</div>", unsafe_allow_html=True)
-                    with colR:
-                        for b in (new_b - old_b):
-                            if len(b) > 4:
-                                st.markdown(f"<div style='background:#ccffcc;padding:4px;margin:2px;border-radius:4px'>+ {b}</div>", unsafe_allow_html=True)
+                rb = set(old["bullets"]) - set(new["bullets"])
+                ab = set(new["bullets"]) - set(old["bullets"])
+                if rb or ab:
+                    has_change = True
+                    with st.container(border=True):
+                        st.markdown(f"**⚠️ {k} - BERUBAH**")
+                        colL, colR = st.columns(2)
+                        with colL:
+                            st.caption("LAMA")
+                            for b in rb:
+                                if len(b)>4:
+                                    st.markdown(f"<div style='background:#ffebee;padding:6px;border-radius:5px;margin:2px'>❌ {b}</div>", unsafe_allow_html=True)
+                        with colR:
+                            st.caption("BARU")
+                            for b in ab:
+                                if len(b)>4:
+                                    st.markdown(f"<div style='background:#e8f5e9;padding:6px;border-radius:5px;margin:2px'>✅ {b}</div>", unsafe_allow_html=True)
+        if not has_change:
+            st.balloons()
+            st.success("🎉 Tidak ada perubahan di Step Kerja! 100% identik")
+        
         st.divider()
         redline_doc, changed = create_redline_docx(old_steps, new_steps)
-        if changed == 0:
-            st.balloons()
-            st.success("WI Identik 100%")
         bio = io.BytesIO()
         redline_doc.save(bio)
         bio.seek(0)
-        st.download_button("📥 DOWNLOAD .DOCX - Laporan Perubahan (Merah Coret = Dihapus, Hijau Tebal = Baru)", data=bio, file_name=f"WI_Redline_{datetime.now().strftime('%Y%m%d')}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
+        colA, colB = st.columns(2)
+        with colA:
+            st.download_button("📥 Download .DOCX Redline", data=bio, file_name=f"WI_Redline_{datetime.now().strftime('%Y%m%d')}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
+        with colB:
+            st.download_button("🖼️ Download Gambar PNG", data=img_bio, file_name=f"WI_Perbedaan_{datetime.now().strftime('%Y%m%d')}.png", mime="image/png", use_container_width=True)
     else:
         st.info("👆 Upload WI Lama & Baru dulu")
 
@@ -281,7 +349,7 @@ def msa_tab():
         st.plotly_chart(fig, use_container_width=True)
 
 st.title("📊 Quality AI PRO")
-tab1, tab2, tab3 = st.tabs(["📊 MSA", "📄 WI Generator", "🔍 WI Comparator .DOCX"])
+tab1, tab2, tab3 = st.tabs(["📊 MSA", "📄 WI Generator", "🔍 WI Comparator - Gambar & Docs"])
 with tab1:
     msa_tab()
 with tab2:
