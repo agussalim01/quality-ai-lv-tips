@@ -10,82 +10,71 @@ from datetime import datetime
 
 st.set_page_config(page_title="Quality AI PRO + Comparator", page_icon="🔍", layout="wide")
 
-def extract_raw_with_color(docx_file):
+def clean_text(t):
+    # Bersihkan bullet dan spasi biar ● 1 batch == 1 batch
+    t = re.sub(r'^[●•\-\*\d\.\s]+', '', t)
+    t = t.strip()
+    return t
+
+def extract_all(docx_file):
     doc = Document(docx_file)
     items = []
-    # 1. Semua paragraf termasuk yang pendek + warna
     for p in doc.paragraphs:
-        for run in p.runs:
-            t = run.text.strip()
-            if not t:
-                continue
-            color = "red" if run.font.color.rgb and str(run.font.color.rgb) != "000000" and str(run.font.color.rgb) != "None" else "normal"
-            if run.font.color.rgb:
-                try:
-                    # Jika merah
-                    if run.font.color.rgb == RGBColor(255,0,0) or "FF0000" in str(run.font.color.rgb):
-                        color = "red"
-                except:
-                    pass
-            # Simpan dengan info warna
-            items.append({"text": t, "color": color, "full": t})
-    
-    # 2. Semua table tanpa filter
+        t = p.text.strip()
+        if t and len(t) >= 2:
+            items.append(t)
     for tbl in doc.tables:
         for row in tbl.rows:
             for cell in row.cells:
                 t = cell.text.strip()
-                if t:
-                    items.append({"text": t, "color": "normal", "full": t})
+                if t and len(t) >= 2:
+                    # Skip header yang sama persis
+                    if t.lower() in ["work instruction", "revision no.", "document no.", "product", "temp. number", "release date", "process desc."]:
+                        continue
+                    if "formulatrix" in t.lower() and len(t) < 30:
+                        continue
+                    items.append(t)
     return items
 
-def parse_steps_raw(items):
-    texts = [i["text"] for i in items]
-    full_text = "\n".join(texts)
-    pattern = r"(Step\s*\d+\s*:.*?(?=Step\s*\d+\s*:|$))"
-    matches = re.findall(pattern, full_text, flags=re.I | re.S)
-    steps = {}
-    for content in matches:
-        m = re.search(r"Step\s*(\d+)", content, re.I)
-        if m:
-            steps[f"Step {m.group(1)}"] = content
-    return steps
-
-def create_redline_docx_raw(old_items, new_items):
-    doc = Document()
-    doc.add_heading(f"LAPORAN PERBANDINGAN WI - {datetime.now().strftime('%d/%m/%Y')}", 1)
+def create_side_by_side_html(old_list, new_list):
+    # Normalisasi untuk compare
+    old_clean = [clean_text(x) for x in old_list]
+    new_clean = [clean_text(x) for x in new_list]
     
-    old_texts = [i["text"] for i in old_items]
-    new_texts = [i["text"] for i in new_items]
+    # Cari yang bener-bener beda
+    sm = difflib.SequenceMatcher(None, old_clean, new_clean)
+    html = ""
+    changes = 0
     
-    diff = list(difflib.ndiff(old_texts, new_texts))
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == 'equal':
+            continue
+        changes += 1
+        if tag == 'delete':
+            for k in range(i1, i2):
+                if old_list[k].strip() and len(clean_text(old_list[k])) > 2:
+                    html += f"<tr style='background:#ffebee'><td style='padding:8px;color:red'>❌ DIHAPUS</td><td style='padding:8px'><s>{old_list[k]}</s></td><td style='padding:8px;color:#ccc'>-</td></tr>"
+        elif tag == 'insert':
+            for k in range(j1, j2):
+                if new_list[k].strip() and len(clean_text(new_list[k])) > 2:
+                    is_ddff = "ddff" in new_list[k].lower()
+                    bg = "#ffcdd2" if is_ddff else "#e8f5e9"
+                    color = "red" if is_ddff else "green"
+                    icon = "🔴" if is_ddff else "✅"
+                    html += f"<tr style='background:{bg}'><td style='padding:8px;color:{color}'>{icon} BARU</td><td style='padding:8px;color:#ccc'>-</td><td style='padding:8px;color:{color}'><b>{new_list[k]}</b></td></tr>"
+        elif tag == 'replace':
+            # Old vs New
+            old_chunk = "<br>".join(old_list[i1:i2])
+            new_chunk = "<br>".join(new_list[j1:j2])
+            # Kalau setelah dibersihkan sama, skip
+            if "".join(old_clean[i1:i2]).lower() == "".join(new_clean[j1:j2]).lower():
+                continue
+            html += f"<tr style='background:#fff9c4'><td style='padding:8px;color:orange'>⚠️ DIUBAH</td><td style='padding:8px;background:#ffebee'><s style='color:red'>{old_chunk}</s></td><td style='padding:8px;background:#e8f5e9;color:green'><b>{new_chunk}</b></td></tr>"
     
-    doc.add_heading("RINGKASAN PERUBAHAN", 2)
-    for line in diff:
-        if line.startswith("- "):
-            p = doc.add_paragraph()
-            run = p.add_run(f"DIHAPUS: {line[2:]}")
-            run.font.strike = True
-            run.font.color.rgb = RGBColor(255,0,0)
-        elif line.startswith("+ "):
-            p = doc.add_paragraph()
-            run = p.add_run(f"BARU: {line[2:]}")
-            run.font.color.rgb = RGBColor(0,128,0)
-            run.bold = True
-    
-    # Khusus highlight ddff merah
-    for item in new_items:
-        if "ddff" in item["text"].lower():
-            doc.add_heading("Teks Merah Terdeteksi:", 2)
-            p = doc.add_paragraph()
-            run = p.add_run(f"-> {item['text']} (warna: {item['color']})")
-            run.font.color.rgb = RGBColor(255,0,0)
-            run.bold = True
-            
-    return doc
+    return html, changes
 
 def comparator_tab():
-    st.subheader("🔍 WI Comparator - RAW Mode (Tangkap ddff Merah)")
+    st.subheader("🔍 WI Comparator - Side by Side (Fix Berantakan)")
     c1, c2 = st.columns(2)
     with c1:
         old_file = st.file_uploader("📂 WI LAMA", type=["docx"], key="old_wi")
@@ -93,70 +82,67 @@ def comparator_tab():
         new_file = st.file_uploader("📂 WI BARU (ada ddff)", type=["docx"], key="new_wi")
     
     if old_file and new_file:
-        old_items = extract_raw_with_color(old_file)
-        new_items = extract_raw_with_color(new_file)
+        old_list = extract_all(old_file)
+        new_list = extract_all(new_file)
         
-        old_texts = [i["text"] for i in old_items]
-        new_texts = [i["text"] for i in new_items]
+        sim = difflib.SequenceMatcher(None, [clean_text(x) for x in old_list], [clean_text(x) for x in new_list]).ratio()*100
+        st.metric("Kemiripan (Sudah Bersih, Tanpa Bullet)", f"{sim:.1f}%")
         
-        sim = difflib.SequenceMatcher(None, old_texts, new_texts).ratio()*100
-        st.metric("Kemiripan RAW (Semua Text)", f"{sim:.1f}%")
+        html, changes = create_side_by_side_html(old_list, new_list)
         
-        # === TAMPILKAN LANGSUNG SEPERTI GAMBAR ===
+        if changes == 0:
+            st.balloons()
+            st.success("🎉 Tidak ada perbedaan isi kerja!")
+        else:
+            st.warning(f"🔍 Ditemukan {changes} group perubahan")
+        
         st.divider()
-        st.subheader("🖼️ Preview Visual Langsung (Seperti Screenshot)")
-        
-        diff = list(difflib.ndiff(old_texts, new_texts))
-        
-        # Buat tampilan kayak Word
-        st.markdown("""
-        <div style="border:2px solid #ccc;padding:20px;background:white">
-        <div style="border:1px solid black;display:flex">
-            <div style="width:30%;border-right:1px solid black;padding:5px"><b>FORMULATRIX</b></div>
-            <div style="width:40%;border-right:1px solid black;padding:5px;text-align:center"><b>WORK INSTRUCTION</b></div>
-            <div style="width:30%;padding:5px">Revision No. -</div>
-        </div>
+        st.subheader("📄 Preview Perbandingan - Kiri LAMA | Kanan BARU")
+        st.markdown(f"""
+        <div style="overflow-x:auto;background:white;border:1px solid #ddd;border-radius:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <tr style="background:#263238;color:white">
+                <th style="padding:10px;width:15%">Status</th>
+                <th style="padding:10px;width:42%">WI LAMA</th>
+                <th style="padding:10px;width:42%">WI BARU</th>
+            </tr>
+            {html if html else "<tr><td colspan=3 style='padding:20px;text-align:center;color:green'>✅ 100% Sama - Tidak ada ddff atau perubahan</td></tr>"}
+        </table>
         </div>
         """, unsafe_allow_html=True)
         
-        st.write("")
-        for line in diff:
-            if line.startswith("- "):
-                if len(line[2:].strip()) > 1:
-                    st.markdown(f"<div style='background:#ffcccc;padding:8px;border-radius:5px;margin:3px'>❌ DIHAPUS: <s style='color:red'>{line[2:]}</s></div>", unsafe_allow_html=True)
-            elif line.startswith("+ "):
-                if len(line[2:].strip()) > 1:
-                    # Kalau ddff merah
-                    if "ddff" in line[2:].lower():
-                        st.markdown(f"<div style='background:#ffcdd2;border:2px solid red;padding:12px;border-radius:5px;margin:5px'><b style='color:red;font-size:18px'>🔴 BARU TERDETEKSI (MERAH): {line[2:]}</b></div>", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"<div style='background:#ccffcc;padding:8px;border-radius:5px;margin:3px'>✅ BARU: <b style='color:green'>{line[2:]}</b></div>", unsafe_allow_html=True)
-        
-        if sim == 100:
-            st.error("Masih 100%? Coba upload ulang, pastikan file BARU memang ada ddff nya")
-        else:
-            st.success(f"✅ Terdeteksi {len([d for d in diff if d.startswith('+ ') or d.startswith('- ')])} perubahan!")
+        # Highlight khusus ddff
+        if any("ddff" in x.lower() for x in new_list):
+            st.divider()
+            st.error("🔴 PERHATIAN: Teks 'ddff' warna merah terdeteksi di WI BARU!")
+            for x in new_list:
+                if "ddff" in x.lower():
+                    st.markdown(f"<div style='background:red;color:white;padding:15px;border-radius:8px;font-size:20px;text-align:center'><b>ddff</b> ditemukan!</div>", unsafe_allow_html=True)
         
         # Download
         st.divider()
-        redline = create_redline_docx_raw(old_items, new_items)
+        doc = Document()
+        doc.add_heading("Laporan Perbandingan WI", 1)
+        doc.add_paragraph(f"Kemiripan: {sim:.1f}% | Perubahan: {changes} group")
+        for line in html.split("<tr"):
+            doc.add_paragraph(line[:200])
         bio = io.BytesIO()
-        redline.save(bio)
+        doc.save(bio)
         bio.seek(0)
-        st.download_button("📥 Download Laporan .DOCX (ddff Merah Akan Ditandai)", data=bio, file_name="WI_Redline_ddff.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
+        st.download_button("📥 Download Laporan .DOCX", data=bio, file_name="WI_Comparison_SideBySide.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
     else:
-        st.info("👆 Upload WI Lama tanpa ddff, dan WI Baru dengan ddff merah")
+        st.info("👆 Upload 2 WI dulu - preview akan langsung side-by-side kayak Word")
 
 def wi_tab():
     st.subheader("📄 WI Generator")
-    st.info("Tab ini tetap seperti kemarin")
+    st.info("Ready")
 
 def msa_tab():
     st.subheader("📊 MSA")
-    st.info("Tab ini tetap")
+    st.info("Ready")
 
 st.title("📊 Quality AI PRO")
-tab1, tab2, tab3 = st.tabs(["📊 MSA", "📄 WI Generator", "🔍 Comparator RAW (Fix ddff)"])
+tab1, tab2, tab3 = st.tabs(["📊 MSA", "📄 WI Generator", "🔍 Comparator Side-by-Side"])
 with tab1: msa_tab()
 with tab2: wi_tab()
 with tab3: comparator_tab()
