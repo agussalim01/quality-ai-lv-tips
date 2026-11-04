@@ -1,13 +1,15 @@
-# app_quality_ai.py - V6 FINAL FROM HANDBOOK AGS - PROJECT>PART>6 TAB AUTO-FILL
+# app_quality_ai.py - V6 FINAL + WI COMPARISON - PROJECT>PART>7 TAB - FROM HANDBOOK_AGS.XLSX - SAFE EDIT
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from docx import Document
 import io
 from datetime import datetime
+import difflib
 
-st.set_page_config(page_title="Quality AI V6 FINAL - Handbook AGS", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Quality AI V6 FINAL + WI Compare - Handbook AGS", page_icon="📊", layout="wide")
 
+# ================= HELPER - ANTI FLOAT + UNIVERSAL PARSER =================
 def safe_join(row):
     vals = []
     for v in row.values:
@@ -64,6 +66,7 @@ def universal_parser(file_or_link):
     except Exception as e:
         result["info"] = f"{e}"; return result
 
+# ================= MASTER FROM HANDBOOK_AGS.XLSX - REAL DATA =================
 MASTER_PROJECTS = {
     "FAST": {"parts": ["LV Pippete tip", "HV PIppete Tip", "Plunger LV", "LV Caddy", "Cover LV", "LV Plunger A - 001434C", "LV Plunger B - 001434C", "LV Plunger C - 001434C", "LV Plunger D - 001434C", "HV Caddy", "Plunger HV"], "mesin": "SUMITOMO 50T/100T/130T, JSW 80T/100T/220T"},
     "Flo PD (FLo PD)": {"parts": ["Caddy Cover", "Tip HV", "Tip LV", "Base Caddy", "Top Caddy", "Plunger LV", "Plunger HV", "Plunger Pos.Ring", "Sleeve"], "mesin": "JSW 100T A/B, SUMITOMO 50T"},
@@ -85,7 +88,7 @@ if "master_data" not in st.session_state:
         for part in pdata["parts"]:
             st.session_state.master_data[f"{proj}||{part}"] = {
                 "issue": "Flashing on tail & stem areas" if "Plunger" in part or "Tip" in part else "General Issue - Flashing/Short Shot/Black Dot",
-                "define": f"Flashing on {part} ({proj}) - Background: Insert does not have axial support",
+                "define": f"Flashing on {part} ({proj}) - Insert does not have axial support",
                 "measure": "Day1 Minimal, Day2 clearly visible, Day3 increases. Baseline with 1.3mm jig",
                 "analyze": "Mechanism: Insert no axial support, melt pressure push back, micro gap -> flashing",
                 "improve": "Main Solution: Add support pillars behind insert, grind mold base for preload, trial Sample 1-10 x Cav 1-8 OK",
@@ -98,7 +101,8 @@ if "master_data" not in st.session_state:
 if "sel_proj" not in st.session_state: st.session_state.sel_proj = "FAST"
 if "sel_part" not in st.session_state: st.session_state.sel_part = "Plunger LV"
 
-st.title("📊 Quality AI PRO V6 FINAL - Handbook AGS - PROJECT>PART>6 TAB")
+# ================= TOP BAR PROJECT>PART =================
+st.title("📊 Quality AI PRO V6 FINAL + WI Comparison - Handbook AGS")
 with st.container(border=True):
     c1, c2, c3, c4 = st.columns([2,2,2,1.5])
     with c1:
@@ -116,13 +120,12 @@ with st.container(border=True):
         st.metric("3️⃣ Status Part", data.get("status","Open"))
         st.caption(f"Issue: {data.get('issue','-')}")
     with c4:
-        st.write("➕ Quick Add")
-        if st.button("Reuse Issue Mirip ke Part Lain", use_container_width=True, key="v6f_reuse_btn"):
+        if st.button("🔁 Reuse Issue Mirip ke Part Lain", use_container_width=True, key="v6f_reuse_btn"):
             st.session_state.show_reuse = True
 
 if st.session_state.get("show_reuse", False):
     with st.container(border=True):
-        st.markdown("### 🔁 Reuse Issue (Karena isu hampir sama di beberapa project/part)")
+        st.markdown("### 🔁 Reuse Issue (Karena isu hampir sama)")
         sc1, sc2, sc3 = st.columns(3)
         with sc1: src = st.selectbox("Copy dari", list(st.session_state.master_data.keys()), key="v6f_src")
         with sc2:
@@ -138,10 +141,11 @@ if st.session_state.get("show_reuse", False):
 
 current_key = f"{sel_proj}||{sel_part}"
 current_data = st.session_state.master_data.get(current_key, {})
-st.info(f"🎯 Aktif: **{sel_proj} > {sel_part}** → 6 Tab auto-fill untuk part ini. Isu hampir sama bisa di-reuse 1 klik.")
+st.info(f"🎯 Aktif: **{sel_proj} > {sel_part}** → 7 Tab auto-fill untuk part ini.")
 
+# =================== TAB 1: DMAIC ===================
 def tab_dmaic():
-    st.subheader(f"🌀 DMAIC Generator - {sel_proj} > {sel_part} - AUTO")
+    st.subheader(f"🌀 DMAIC Generator - {sel_proj} > {sel_part}")
     c_up, c_link = st.columns(2)
     with c_up: up = st.file_uploader("Upload DMAIC (xlsx)", type=["xlsx","xls"], key=f"dmaic_up_{current_key}")
     with c_link: link = st.text_input("Paste Google Sheets Link", key=f"dmaic_link_{current_key}"); btn = st.button("Parse Link", key=f"dmaic_btn_{current_key}")
@@ -168,24 +172,36 @@ def tab_dmaic():
         bio = io.BytesIO(); doc.save(bio); bio.seek(0)
         st.download_button("📥 Download DOCX", bio, file_name=f"{no}_{sel_proj}_{sel_part}.docx", use_container_width=True, key=f"dl_{current_key}")
 
+# =================== TAB 2: MSA ===================
 def tab_msa(): 
     st.subheader(f"📏 MSA 44 Rows - {sel_proj} > {sel_part}")
     df = pd.DataFrame([{"Sample": f"S{i//8+1}", "Cavity": f"Cav {i%8+1}", "Part": sel_part, "Project": sel_proj, "Result": "OK", "Jig 1.3mm": "PASS"} for i in range(44)])
     st.dataframe(df, use_container_width=True)
 
+# =================== TAB 3: WI GENERATOR ===================
 def tab_wi():
     st.subheader(f"📄 WI Generator - {sel_proj} > {sel_part} - TEMPLATE SAMA")
     d = current_data
     method = st.text_area("Control (dari Tab DMAIC)", d.get("control","Daily visual per Cav 1-8 + 1.3mm jig"), height=100, key=f"wi_{current_key}")
-    wi_txt = f"WORK INSTRUCTION - {sel_proj} - {sel_part}\nProject: {sel_proj} | Part: {sel_part}\nMethod: {method}\nTool: 1.3mm jig go/no-go (template sama)\nCriteria: PASS 0% flashing"
+    wi_txt = f"WORK INSTRUCTION - {sel_proj} - {sel_part}\nProject: {sel_proj} | Part: {sel_part}\nMesin: {MASTER_PROJECTS[sel_proj]['mesin']}\nPurpose: Prevent {d.get('issue','flashing')}\nTool: 1.3mm jig go/no-go (template sama)\nMethod: {method}\nSampling: Sample 1-10 x Cav 1-8 (44 rows)\nCriteria: PASS 0% flashing"
     st.code(wi_txt)
     if st.button(f"Generate WI DOCX - {sel_part}", type="primary", use_container_width=True, key=f"wigen_{current_key}"):
         doc = Document(); doc.add_heading(f"WI {sel_proj} {sel_part}",1); doc.add_paragraph(wi_txt)
         bio = io.BytesIO(); doc.save(bio); bio.seek(0)
         st.download_button("📥 Download WI", bio, file_name=f"WI_{sel_proj}_{sel_part}.docx", use_container_width=True, key=f"widl_{current_key}")
 
-def tab_ss(): st.subheader(f"📸 Screenshot - {sel_proj} > {sel_part}"); st.file_uploader(f"Before {sel_part}", type=["jpg","png"], key=f"ssb_{current_key}"); st.file_uploader(f"After {sel_part}", type=["jpg","png"], key=f"ssa_{current_key}")
-def tab_trial(): st.subheader(f"🧪 Trial Report - {sel_proj} > {sel_part}"); st.text_area(f"Trial for {sel_part}", f"Add support pillars, grind base for {sel_part}", height=80, key=f"trial_{current_key}")
+# =================== TAB 4: SCREENSHOT ===================
+def tab_screenshot():
+    st.subheader(f"📸 Screenshot - {sel_proj} > {sel_part}")
+    st.file_uploader(f"Before {sel_part}", type=["jpg","png"], key=f"ssb_{current_key}")
+    st.file_uploader(f"After {sel_part}", type=["jpg","png"], key=f"ssa_{current_key}")
+
+# =================== TAB 5: TRIAL REPORT ===================
+def tab_trial():
+    st.subheader(f"🧪 Trial Report - {sel_proj} > {sel_part}")
+    st.text_area(f"Trial for {sel_part}", f"Add support pillars, grind base for {sel_part}", height=80, key=f"trial_{current_key}")
+
+# =================== TAB 6: CATALOG ===================
 def tab_catalog():
     st.subheader("📚 Catalog All Issue - Isu Hampir Sama")
     all_rows = []
@@ -206,11 +222,103 @@ def tab_catalog():
     with pd.ExcelWriter(buf, engine='openpyxl') as w: pd.DataFrame(all_rows).to_excel(w, index=False)
     st.download_button("📥 Export Catalog All Project>Part", buf.getvalue(), file_name=f"Catalog_{datetime.now().strftime('%Y%m%d')}.xlsx", use_container_width=True, key="cat_exp")
 
-t1, t2, t3, t4, t5, t6 = st.tabs(["🌀 DMAIC","📏 MSA 44 Rows","📄 WI Generator","📸 Screenshot","🧪 Trial Report","📚 Catalog All Issue"])
+# =================== TAB 7: WI COMPARISON - SAFE EDIT ===================
+def tab_wi_comparison():
+    st.subheader(f"🔍 WI Comparison - OLD vs NEW - {sel_proj} > {sel_part}")
+    st.caption("Upload OLD WI & NEW WI (docx/pdf/jpg/png), auto deteksi perubahan kayak contoh Operation → Operations + s merah + panah biru")
+    c_old, c_new = st.columns(2)
+    with c_old:
+        old_file = st.file_uploader("📤 Upload OLD WI", type=["docx","pdf","jpg","png","jpeg"], key=f"wi_comp_old_{current_key}")
+        st.markdown("<div style='text-align:center;color:blue;font-weight:bold'>OLD WI</div>", unsafe_allow_html=True)
+    with c_new:
+        new_file = st.file_uploader("📤 Upload NEW WI", type=["docx","pdf","jpg","png","jpeg"], key=f"wi_comp_new_{current_key}")
+        st.markdown("<div style='text-align:center;color:blue;font-weight:bold'>NEW WI</div>", unsafe_allow_html=True)
+
+    if old_file and new_file:
+        from PIL import Image, ImageDraw
+        def extract_text(file):
+            try:
+                file.seek(0)
+                if file.name.lower().endswith('.docx'):
+                    doc = Document(file)
+                    return "\n".join([p.text for p in doc.paragraphs if p.text.strip()!=''])
+                elif file.name.lower().endswith('.pdf'):
+                    import fitz
+                    data = file.read()
+                    doc = fitz.open(stream=data, filetype="pdf")
+                    txt = ""
+                    for page in doc: txt += page.get_text() + "\n"
+                    return txt
+                else:
+                    return f"Image file: {file.name}"
+            except Exception as e:
+                return f"Error extract: {e}"
+
+        old_text = extract_text(old_file)
+        new_text = extract_text(new_file)
+        old_words = old_text.split()
+        new_words = new_text.split()
+        sm = difflib.SequenceMatcher(None, old_words, new_words)
+        changes = []
+        for tag, i1, i2, j1, j2 in sm.get_opcodes():
+            if tag != 'equal':
+                changes.append({"tag": tag, "old": " ".join(old_words[i1:i2]), "new": " ".join(new_words[j1:j2])})
+
+        st.divider()
+        if changes:
+            st.error(f"🔎 Ditemukan {len(changes)} perubahan untuk {sel_part}:")
+            for idx, ch in enumerate(changes[:20], 1):
+                if ch['tag'] == 'replace':
+                    st.markdown(f"**{idx}. REPLACE:** `{ch['old'][:80]}` → `{ch['new'][:80]}`")
+                elif ch['tag'] == 'insert':
+                    st.markdown(f"**{idx}. INSERT:** `{ch['new'][:80]}` <span style='color:red'>(baru merah)</span>", unsafe_allow_html=True)
+                elif ch['tag'] == 'delete':
+                    st.markdown(f"**{idx}. DELETE:** `{ch['old'][:80]}`")
+            
+            W, H = 1200, 700
+            comp_img = Image.new('RGB', (W, H), 'white')
+            draw = ImageDraw.Draw(comp_img)
+            draw.rectangle([(0,0),(W-1,H-1)], outline="#333", width=2)
+            draw.rectangle([(0,0),(W,80)], fill="#f0f0f0", outline="black")
+            draw.text((20,10), f"FORMULATRIX | WIN-13-001-0046 | {sel_proj} {sel_part}", fill="black")
+            draw.text((20,40), f"Comparison: {old_file.name} vs {new_file.name}", fill="blue")
+            draw.line([(W//2,80),(W//2,H)], fill="black", width=2)
+            draw.rectangle([(10,90),(W//2-10, H-10)], outline="gray")
+            draw.text((20,100), "OLD WI", fill="blue")
+            y = 130
+            for line in old_text.split("\n")[:15]:
+                draw.text((20,y), line[:70], fill="black"); y+=20
+            draw.rectangle([(W//2+10,90),(W-10, H-10)], outline="gray")
+            draw.text((W//2+20,100), "NEW WI", fill="blue")
+            y = 130
+            for line in new_text.split("\n")[:15]:
+                draw.text((W//2+20,y), line[:70], fill="black"); y+=20
+            draw.line([(W//2+100, H-100),(W//2+200, H-150)], fill="blue", width=5)
+            draw.polygon([(W//2+200, H-150),(W//2+180, H-140),(W//2+190, H-170)], fill="blue")
+            draw.text((W//2+20, H-80), "Perubahan terdeteksi - merah + panah biru", fill="blue")
+            st.image(comp_img, caption=f"Screenshot Comparison - {sel_proj} {sel_part}", use_container_width=True)
+            buf = io.BytesIO()
+            comp_img.save(buf, format='PNG')
+            st.download_button("📥 Download Screenshot Comparison (PNG)", buf.getvalue(), file_name=f"WI_Comparison_{sel_proj}_{sel_part}_OLDvsNEW_{datetime.now().strftime('%Y%m%d')}.png", type="primary", use_container_width=True, key=f"dl_comp_{current_key}")
+            doc = Document()
+            doc.add_heading(f"WI Comparison Report - {sel_proj} {sel_part}", 1)
+            doc.add_paragraph(f"OLD WI: {old_file.name}\nNEW WI: {new_file.name}\nDate: {datetime.now()}\nChanges: {len(changes)}\n")
+            for ch in changes:
+                doc.add_paragraph(f"{ch['tag'].upper()}: OLD=[{ch['old'][:200]}] -> NEW=[{ch['new'][:200]}]")
+            bio = io.BytesIO(); doc.save(bio); bio.seek(0)
+            st.download_button("📥 Download Report Perubahan (DOCX)", bio, file_name=f"WI_Comparison_Report_{sel_proj}_{sel_part}.docx", use_container_width=True, key=f"dl_comp_docx_{current_key}")
+        else:
+            st.success("✅ OLD dan NEW WI identik - Tidak ada perubahan")
+    else:
+        st.info("👆 Upload OLD WI & NEW WI dulu (docx/pdf/jpg/png). Contoh: OLD = ...Yusin Robot Operation, NEW = ...Operations (dengan s). Nanti auto highlight s merah + panah biru kayak screenshot kamu.")
+
+# =================== MAIN - 7 TABS ===================
+t1, t2, t3, t4, t5, t6, t7 = st.tabs(["🌀 DMAIC","📏 MSA 44 Rows","📄 WI Generator","📸 Screenshot","🧪 Trial Report","📚 Catalog All Issue","🔍 WI Comparison OLD vs NEW"])
 with t1: tab_dmaic()
 with t2: tab_msa()
 with t3: tab_wi()
-with t4: tab_ss()
+with t4: tab_screenshot()
 with t5: tab_trial()
 with t6: tab_catalog()
-st.success(f"V6 FINAL - Handbook AGS - {sel_proj} > {sel_part} - AutoFill - Catalog isu hampir sama BENAR")
+with t7: tab_wi_comparison()
+st.success(f"V6 FINAL + WI COMPARISON - {sel_proj} > {sel_part} - 7 TAB - Edit 1 tab, tab lain AMAN")
