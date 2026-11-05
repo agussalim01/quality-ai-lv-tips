@@ -1,4 +1,4 @@
-# app_quality_ai.py - V6 FINAL FIXED V3 - FULL 7 TABS SAFE RUN
+# app_quality_ai.py - V6 FINAL FIXED V3 - FULL COMPREHENSIVE SAFE CODE
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -6,6 +6,7 @@ from docx import Document
 import io
 from datetime import datetime
 import difflib
+import requests
 
 # Safe Import AI Helper
 AI_AVAILABLE = False
@@ -237,7 +238,7 @@ def tab_catalog():
 
 def tab_wi_comparison():
     st.subheader(f"🔍 WI Comparison - OLD vs NEW - {sel_proj} > {sel_part}")
-    st.caption("Bisa membandingkan dari Upload File (.docx/.pdf) atau langsung memasukkan Link Dokumen.")
+    st.caption("Membandingkan dari Upload File (.docx/.pdf) atau langsung via Link Google Docs & Google Sheets.")
 
     input_type = st.radio("Pilih Metode Input:", ["📄 Upload File", "🔗 Link Dokumen / Sheets"], horizontal=True, key=f"radio_in_{current_key}")
     old_text, new_text = "", ""
@@ -259,45 +260,25 @@ def tab_wi_comparison():
         with c_link_new:
             url_new = st.text_input("🔗 Link NEW Document/Sheets:", placeholder="https://docs.google.com/...", key=f"url_new_{current_key}")
 
-        if url_old and url_new:
+        if url_old.strip() and url_new.strip():
             with st.spinner("Mengambil konten dari link..."):
-                if "docs.google.com/spreadsheets" in url_old and "docs.google.com/spreadsheets" in url_new:
-                    p_old = universal_parser(url_old)
-                    p_new = universal_parser(url_new)
-                    old_text = f"{p_old['define']}\n{p_old['measure']}\n{p_old['analyze']}\n{p_old['improve']}\n{p_old['control']}"
-                    new_text = f"{p_new['define']}\n{p_new['measure']}\n{p_new['analyze']}\n{p_new['improve']}\n{p_new['control']}"
+                def fetch_text_from_link(url):
+                    try:
+                        clean_url = url.strip()
+                        # Clean Google Docs / Sheets ID parser
+                        if "/d/" in clean_url:
+                            doc_id = clean_url.split("/d/")[1].split("/")[0]
+                        else:
+                            return ""
 
-    if old_text and new_text:
-        diff_result_html = generate_doc_diff_html(old_text, new_text)
-        st.subheader("📑 Perbandingan Dokumen (Google Docs Style)")
-        with st.container(border=True):
-            legend_html = (
-                '<b>Legenda Perubahan:</b> '
-                '<span style="background-color: #ffebe9; color: #cf222e; text-decoration: line-through; padding: 2px 6px; border-radius: 3px;">Teks Dihapus</span> '
-                '<span style="background-color: #dafbe1; color: #1a7f37; font-weight: bold; padding: 2px 6px; border-radius: 3px;">Teks Ditambahkan</span>'
-            )
-            st.markdown(legend_html, unsafe_allow_html=True)
-            st.divider()
-            st.markdown(f'<div style="line-height: 1.8; font-family: sans-serif; background: #ffffff; padding: 15px; border-radius: 5px; border: 1px solid #ddd; max-height: 600px; overflow-y: auto;">{diff_result_html}</div>', unsafe_allow_html=True)
-
-        if AI_AVAILABLE:
-            st.divider()
-            if st.button("🤖 Review Hasil Perubahan WI Ini Menggunakan Gemini AI", type="primary", key=f"btn_ai_wicomp_{current_key}"):
-                with st.spinner("AI sedang mengevaluasi..."):
-                    review_res = analyze_wi_text(old_text, new_text, sel_proj, sel_part)
-                    st.markdown("### 📋 Laporan Review AI:")
-                    st.markdown(review_res)
-    else:
-        st.info("👆 Masukkan kedua file atau link di atas untuk melihat hasil perbandingan.")
-
-# =================== RENDER TAB ===================
-t1, t2, t3, t4, t5, t6, t7 = st.tabs(["🌀 DMAIC", "📏 MSA 44 Rows", "📄 WI Generator", "📸 Screenshot", "🧪 Trial Report", "📚 Catalog All Issue", "🔍 WI Comparison V3 HEADER REAL"])
-with t1: tab_dmaic()
-with t2: tab_msa()
-with t3: tab_wi()
-with t4: tab_screenshot()
-with t5: tab_trial()
-with t6: tab_catalog()
-with t7: tab_wi_comparison()
-
-st.success(f"V6 FINAL V3 - {sel_proj} > {sel_part} - Ready!")
+                        if "docs.google.com/document" in clean_url:
+                            export_url = f"https://docs.google.com/document/d/{doc_id}/export?format=txt"
+                            res = requests.get(export_url)
+                            if res.status_code == 200:
+                                return res.text
+                            else:
+                                st.error(f"⚠️ Gagal membaca Google Docs. Pastikan akses di-set ke 'Anyone with the link' (Public).")
+                                return ""
+                        elif "docs.google.com/spreadsheets" in clean_url:
+                            export_url = f"https://docs.google.com/spreadsheets/d/{doc_id}/export?format=csv"
+                            res = requests.get(
