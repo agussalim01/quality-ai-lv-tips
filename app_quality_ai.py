@@ -262,6 +262,21 @@ def tab_wi_comparison():
         diff_result_html = generate_doc_diff_html(old_text, new_text)
         st.subheader("📑 Perbandingan Dokumen (Google Docs Style)")
         with st.container(border=True):
-            st.markdown("**Legenda Perubahan:** "
-                        '<span style="background-color: #ffebe9; color: #cf222e; text-decoration: line-through; padding: 2px 6px; border-radius: 3px;">Teks Dihapus</span> '
-                        '<span style="background-color: #dafbe1; color: #1a7f37; font-weight: bold; padding: 2px 6px; border-radius: 3px;">Teks Ditambahkan</span>',
+            legend_html = (
+                '<b>Legenda Perubahan:</b> '
+                '<span style="background-color: #ffebe9; color: #cf222e; text-decoration: line-through; padding: 2px 6px; border-radius: 3px;">Teks Dihapus</span> '
+                '<span style="background-color: #dafbe1; color: #1a7f37; font-weight: bold; padding: 2px 6px; border-radius: 3px;">Teks Ditambahkan</span>'
+            )
+            st.markdown(legend_html, unsafe_allow_html=True)
+            st.divider()
+            st.markdown(f'<div style="line-height: 1.8; font-family: sans-serif; background: #ffffff; padding: 15px; border-radius: 5px; border: 1px solid #ddd; max-height: 600px; overflow-y: auto;">{diff_result_html}</div>', unsafe_allow_html=True)
+
+        if AI_AVAILABLE:
+            st.divider()
+            if st.button("🤖 Review Hasil Perubahan WI Ini Menggunakan Gemini AI", type="primary", key=f"btn_ai_wicomp_{current_key}"):
+                with st.spinner("AI sedang mengevaluasi..."):
+                    review_res = analyze_wi_text(old_text, new_text, sel_proj, sel_part)
+                    st.markdown("### 📋 Laporan Review AI:")
+                    st.markdown(review_res)
+    else:
+        st.info("👆 Masukkan kedua file atau link di atas untuk melihat hasil perbandingan.")
