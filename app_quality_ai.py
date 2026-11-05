@@ -1,4 +1,4 @@
-# app_quality_ai.py - V6 FINAL FIXED V3 - SAFE EDIT & AI INTEGRATED
+# app_quality_ai.py - V6 FINAL FIXED V3 - FULL 7 TABS SAFE RUN
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -7,13 +7,13 @@ import io
 from datetime import datetime
 import difflib
 
-# Safe Import untuk ai_helper agar aplikasi tidak crash/blank
+# Safe Import AI Helper
 AI_AVAILABLE = False
 try:
     import ai_helper
     from ai_helper import analyze_wi_text, analyze_trial_screenshot
     AI_AVAILABLE = True
-except Exception as e:
+except Exception:
     pass
 
 st.set_page_config(page_title="Quality AI V6 FINAL V3 HEADER REAL", page_icon="📊", layout="wide")
@@ -187,96 +187,4 @@ def tab_dmaic():
 
 def tab_msa(): 
     st.subheader(f"📏 MSA 44 Rows - {sel_proj} > {sel_part}")
-    df = pd.DataFrame([{"Sample": f"S{i//8+1}", "Cavity": f"Cav {i%8+1}", "Part": sel_part, "Result": "OK", "Jig 1.3mm": "PASS"} for i in range(44)])
-    st.dataframe(df, use_container_width=True)
-
-def tab_wi():
-    st.subheader(f"📄 WI Generator - {sel_proj} > {sel_part}")
-    d = current_data
-    method = st.text_area("Control", d.get("control", "Daily visual per Cav 1-8 + 1.3mm jig"), height=80, key=f"wi_{current_key}")
-    wi_txt = f"WORK INSTRUCTION - {sel_proj} - {sel_part}\nMethod: {method}\nTool: 1.3mm jig"
-    st.code(wi_txt)
-
-def tab_screenshot():
-    st.subheader(f"📸 Screenshot - {sel_proj} > {sel_part}")
-    f_before = st.file_uploader(f"Before {sel_part}", type=["jpg", "png"], key=f"ssb_{current_key}")
-    f_after = st.file_uploader(f"After {sel_part}", type=["jpg", "png"], key=f"ssa_{current_key}")
-    
-    if f_before and f_after and AI_AVAILABLE:
-        if st.button("✨ Auto-Analisis Before/After dengan Gemini AI", key=f"btn_ai_ss_{current_key}"):
-            from PIL import Image
-            img_b = Image.open(f_before)
-            img_a = Image.open(f_after)
-            with st.spinner("AI sedang menganalisis perbedaan foto..."):
-                res_ai = analyze_trial_screenshot(img_b, img_a, sel_proj, sel_part)
-                st.markdown("### 🤖 Hasil Analisis Visual AI:")
-                st.info(res_ai)
-
-def tab_trial():
-    st.subheader(f"🧪 Trial Report - {sel_proj} > {sel_part}")
-    st.text_area(f"Trial for {sel_part}", f"Add support pillars for {sel_part}", height=80, key=f"trial_{current_key}")
-
-def tab_catalog():
-    st.subheader("📚 Catalog All Issue")
-    all_rows = []
-    for k, v in st.session_state.master_data.items():
-        if "||" in k:
-            pj, pt = k.split("||")
-            all_rows.append({"Project": pj, "Part": pt, "Issue": v.get("issue", ""), "Status": v.get("status", "")})
-    df = pd.DataFrame(all_rows)
-    st.dataframe(df, use_container_width=True, height=400)
-
-def tab_wi_comparison():
-    st.subheader(f"🔍 WI Comparison - OLD vs NEW - {sel_proj} > {sel_part}")
-    st.caption("Bisa membandingkan dari Upload File (.docx/.pdf) atau langsung memasukkan Link Dokumen.")
-
-    input_type = st.radio("Pilih Metode Input:", ["📄 Upload File", "🔗 Link Dokumen / Sheets"], horizontal=True, key=f"radio_in_{current_key}")
-    old_text, new_text = "", ""
-
-    if input_type == "📄 Upload File":
-        c_old, c_new = st.columns(2)
-        with c_old:
-            old_file = st.file_uploader("📤 Upload OLD WI", type=["docx", "pdf"], key=f"wi_old_{current_key}")
-        with c_new:
-            new_file = st.file_uploader("📤 Upload NEW WI", type=["docx", "pdf"], key=f"wi_new_{current_key}")
-
-        if old_file and new_file:
-            old_text = extract_file_content(old_file.getvalue(), old_file.name)
-            new_text = extract_file_content(new_file.getvalue(), new_file.name)
-    else:
-        c_link_old, c_link_new = st.columns(2)
-        with c_link_old:
-            url_old = st.text_input("🔗 Link OLD Document/Sheets:", placeholder="https://docs.google.com/...", key=f"url_old_{current_key}")
-        with c_link_new:
-            url_new = st.text_input("🔗 Link NEW Document/Sheets:", placeholder="https://docs.google.com/...", key=f"url_new_{current_key}")
-
-        if url_old and url_new:
-            with st.spinner("Mengambil konten dari link..."):
-                if "docs.google.com/spreadsheets" in url_old and "docs.google.com/spreadsheets" in url_new:
-                    p_old = universal_parser(url_old)
-                    p_new = universal_parser(url_new)
-                    old_text = f"{p_old['define']}\n{p_old['measure']}\n{p_old['analyze']}\n{p_old['improve']}\n{p_old['control']}"
-                    new_text = f"{p_new['define']}\n{p_new['measure']}\n{p_new['analyze']}\n{p_new['improve']}\n{p_new['control']}"
-
-    if old_text and new_text:
-        diff_result_html = generate_doc_diff_html(old_text, new_text)
-        st.subheader("📑 Perbandingan Dokumen (Google Docs Style)")
-        with st.container(border=True):
-            legend_html = (
-                '<b>Legenda Perubahan:</b> '
-                '<span style="background-color: #ffebe9; color: #cf222e; text-decoration: line-through; padding: 2px 6px; border-radius: 3px;">Teks Dihapus</span> '
-                '<span style="background-color: #dafbe1; color: #1a7f37; font-weight: bold; padding: 2px 6px; border-radius: 3px;">Teks Ditambahkan</span>'
-            )
-            st.markdown(legend_html, unsafe_allow_html=True)
-            st.divider()
-            st.markdown(f'<div style="line-height: 1.8; font-family: sans-serif; background: #ffffff; padding: 15px; border-radius: 5px; border: 1px solid #ddd; max-height: 600px; overflow-y: auto;">{diff_result_html}</div>', unsafe_allow_html=True)
-
-        if AI_AVAILABLE:
-            st.divider()
-            if st.button("🤖 Review Hasil Perubahan WI Ini Menggunakan Gemini AI", type="primary", key=f"btn_ai_wicomp_{current_key}"):
-                with st.spinner("AI sedang mengevaluasi..."):
-                    review_res = analyze_wi_text(old_text, new_text, sel_proj, sel_part)
-                    st.markdown("### 📋 Laporan Review AI:")
-                    st.markdown(review_res)
-    else:
-        st.info("👆 Masukkan kedua file atau link di atas untuk melihat hasil perbandingan.")
+    df = pd.DataFrame([{"Sample": f"S{i//8+1}", "Cavity": f"Cav {i%8+1}", "Part": sel_part, "Result": "OK", "Jig
