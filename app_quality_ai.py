@@ -1,4 +1,10 @@
-# app_quality_ai.py - V6 FINAL FIXED V3 - HEADER REAL 100% FROM template_WI_landscape.docx
+# Tambahkan import modul AI yang baru dibuat
+try:
+    from ai_helper import analyze_wi_text, analyze_trial_screenshot
+    AI_AVAILABLE = True
+except Exception:
+    AI_AVAILABLE = False
+    # app_quality_ai.py - V6 FINAL FIXED V3 - HEADER REAL 100% FROM template_WI_landscape.docx
 import streamlit as st
 import pandas as pd
 import plotly.express as px
