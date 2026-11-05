@@ -228,22 +228,50 @@ def tab_catalog():
     df = pd.DataFrame(all_rows)
     st.dataframe(df, use_container_width=True, height=400)
 
-# =================== TAB 7: WI COMPARISON V3 (GOOGLE DOCS COMPARE + AI) ===================
+# =================== TAB 7: WI COMPARISON (SUPPORT LINK & FILE) ===================
 def tab_wi_comparison():
     st.subheader(f"🔍 WI Comparison - OLD vs NEW - {sel_proj} > {sel_part}")
-    st.caption("Perbandingan Dokumen ala Google Docs Track Changes (Merah = Terhapus, Hijau = Ditambahkan)")
+    st.caption("Bisa membandingkan dari Upload File (.docx/.pdf) atau langsung memasukkan Link Dokumen.")
 
-    c_old, c_new = st.columns(2)
-    with c_old:
-        old_file = st.file_uploader("📤 Upload OLD WI", type=["docx", "pdf"], key=f"wi_old_{current_key}")
-    with c_new:
-        new_file = st.file_uploader("📤 Upload NEW WI", type=["docx", "pdf"], key=f"wi_new_{current_key}")
+    # Pilihan Metode Input: Upload File atau Masukkan Link
+    input_type = st.radio("Pilih Metode Input:", ["📄 Upload File", "🔗 Link Dokumen / Sheets"], horizontal=True, key=f"radio_in_{current_key}")
 
-    if old_file and new_file:
-        with st.spinner("Membaca dan membandingkan dokumen..."):
+    old_text = ""
+    new_text = ""
+
+    if input_type == "📄 Upload File":
+        c_old, c_new = st.columns(2)
+        with c_old:
+            old_file = st.file_uploader("📤 Upload OLD WI", type=["docx", "pdf"], key=f"wi_old_{current_key}")
+        with c_new:
+            new_file = st.file_uploader("📤 Upload NEW WI", type=["docx", "pdf"], key=f"wi_new_{current_key}")
+
+        if old_file and new_file:
             old_text = extract_file_content(old_file.getvalue(), old_file.name)
             new_text = extract_file_content(new_file.getvalue(), new_file.name)
-            diff_result_html = generate_doc_diff_html(old_text, new_text)
+
+    else:
+        # Input via LINK
+        c_link_old, c_link_new = st.columns(2)
+        with c_link_old:
+            url_old = st.text_input("🔗 Paste Link OLD Document / Sheets:", placeholder="https://docs.google.com/...", key=f"url_old_{current_key}")
+        with c_link_new:
+            url_new = st.text_input("🔗 Paste Link NEW Document / Sheets:", placeholder="https://docs.google.com/...", key=f"url_new_{current_key}")
+
+        if url_old and url_new:
+            with st.spinner("Mengambil konten dari link..."):
+                # Ekstrak data jika berupa Google Sheets
+                if "docs.google.com/spreadsheets" in url_old and "docs.google.com/spreadsheets" in url_new:
+                    p_old = universal_parser(url_old)
+                    p_new = universal_parser(url_new)
+                    old_text = f"{p_old['define']}\n{p_old['measure']}\n{p_old['analyze']}\n{p_old['improve']}\n{p_old['control']}"
+                    new_text = f"{p_new['define']}\n{p_new['measure']}\n{p_new['analyze']}\n{p_new['improve']}\n{p_new['control']}"
+                else:
+                    st.warning("Untuk Link Google Docs (Word), pastikan akses link diset 'Anyone with link' atau gunakan ekspor format teks.")
+
+    # Tampilkan Hasil Perbandingan jika teks sudah berhasil didapat dari file/link
+    if old_text and new_text:
+        diff_result_html = generate_doc_diff_html(old_text, new_text)
 
         st.subheader("📑 Perbandingan Dokumen (Google Docs Style)")
         with st.container(border=True):
@@ -252,10 +280,8 @@ def tab_wi_comparison():
                         '<span style="background-color: #dafbe1; color: #1a7f37; font-weight: bold; padding: 2px 6px; border-radius: 3px;">Teks Ditambahkan</span>', 
                         unsafe_allow_html=True)
             st.divider()
-            # Tampilan hasil pembanding ala Google Docs
             st.markdown(f'<div style="line-height: 1.8; font-family: sans-serif; background: #ffffff; padding: 15px; border-radius: 5px; border: 1px solid #ddd; max-height: 600px; overflow-y: auto;">{diff_result_html}</div>', unsafe_allow_html=True)
 
-        # Integrasi AI Reviewer pada WI Comparison
         if AI_AVAILABLE:
             st.divider()
             if st.button("🤖 Review Hasil Perubahan WI Ini Menggunakan Gemini AI", type="primary", key=f"btn_ai_wicomp_{current_key}"):
@@ -264,16 +290,4 @@ def tab_wi_comparison():
                     st.markdown("### 📋 Laporan Review AI (Standardisasi Quality):")
                     st.markdown(review_res)
     else:
-        st.info("👆 Upload OLD WI & NEW WI untuk melihat perbandingan ala Google Docs secara otomatis.")
-
-# =================== RENDER TAB ===================
-t1, t2, t3, t4, t5, t6, t7 = st.tabs(["🌀 DMAIC", "📏 MSA 44 Rows", "📄 WI Generator", "📸 Screenshot", "🧪 Trial Report", "📚 Catalog All Issue", "🔍 WI Comparison V3 HEADER REAL"])
-with t1: tab_dmaic()
-with t2: tab_msa()
-with t3: tab_wi()
-with t4: tab_screenshot()
-with t5: tab_trial()
-with t6: tab_catalog()
-with t7: tab_wi_comparison()
-
-st.success(f"V6 FINAL V3 - {sel_proj} > {sel_part} - Optimized for Fast Upload & Google Docs Compare")
+        st.info("👆 Masukkan kedua file atau link di atas untuk memulai perbandingan secara otomatis.")
