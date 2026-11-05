@@ -1,4 +1,4 @@
-# app_quality_ai.py - V6 FINAL FIXED V3 - FULL SIDE-BY-SIDE COMPARE
+# app_quality_ai.py - V6 FINAL FIXED V3 - FULL 7 TABS WITH DYNAMIC CATALOG & COMPARE
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -232,14 +232,95 @@ def tab_trial():
     st.text_area(f"Trial for {sel_part}", f"Add support pillars for {sel_part}", height=80, key=f"trial_{current_key}")
 
 def tab_catalog():
-    st.subheader("📚 Catalog All Issue")
-    all_rows = []
-    for k, v in st.session_state.master_data.items():
-        if "||" in k:
-            pj, pt = k.split("||")
-            all_rows.append({"Project": pj, "Part": pt, "Issue": v.get("issue", ""), "Status": v.get("status", "")})
-    df = pd.DataFrame(all_rows)
-    st.dataframe(df, use_container_width=True, height=400)
+    st.subheader(f"📚 Catalog Issue & Action Plan - {sel_proj} > {sel_part}")
+    st.caption("Katalog masalah spesifik beserta rekomendasi tindakan iteratif untuk mesin dan part terdeteksi.")
+
+    # Master Katalog Rekomendasi berdasarkan Isu/Proyek
+    catalog_database = [
+        {
+            "Project": "FAST",
+            "Part": "Plunger LV",
+            "Mesin": "SUMITOMO 50T/100T / JSW",
+            "Defect / Issue": "Flashing on tail & stem areas",
+            "Penyebab Utama (Root Cause)": "Insert no axial support, melt pressure push back",
+            "Iterasi 1 (Action Immediate)": "Turunkan hold pressure & periksa V/P transfer point",
+            "Iterasi 2 (Action Mold/Tooling)": "Tambahkan support pillar pada mold base & ratakan permukaan insert",
+            "Iterasi 3 (Standardisasi & Control)": "Gunakan Jig 1.3mm per Cav 1-8 harian & audit mingguan",
+            "Status": "Open"
+        },
+        {
+            "Project": "Tempest",
+            "Part": "Tempest HV",
+            "Mesin": "Silicon Molding",
+            "Defect / Issue": "Bowing / Leaking Issue",
+            "Penyebab Utama (Root Cause)": "Perbedaan suhu MTC Core & Cavity, Ejector hold time kurang",
+            "Iterasi 1 (Action Immediate)": "Setel MTC Cavity 60°C dan Core 60°C (sebelumnya Cavity 70°C)",
+            "Iterasi 2 (Action Mold/Tooling)": "Naikkan Ejector holding time dari 0 detik ke 3 detik",
+            "Iterasi 3 (Standardisasi & Control)": "Ukur gap dengan feeler gauge (target < 0.35mm)",
+            "Status": "Closed"
+        },
+        {
+            "Project": "NT8",
+            "Part": "LV Tips",
+            "Mesin": "JSW 100T",
+            "Defect / Issue": "Penyok Ujung & Cut/Runner NG",
+            "Penyebab Utama (Root Cause)": "Misalignment arm & cutting die, flashing di pangkal tip",
+            "Iterasi 1 (Action Immediate)": "Ganti cutting dies set baru & bersihkan runner residue",
+            "Iterasi 2 (Action Mold/Tooling)": "Ubah metode ukur Keyence dari X-axis ke Z-axis (flat surface)",
+            "Iterasi 3 (Standardisasi & Control)": "Gunakan jig V-groove dengan anodized finish",
+            "Status": "In Progress"
+        },
+        {
+            "Project": "RX",
+            "Part": "RX / RI360",
+            "Mesin": "General / JSW 100T",
+            "Defect / Issue": "Silver Marks & Bubble",
+            "Penyebab Utama (Root Cause)": "Material lembap, V/P Transfer (1st) & Hold Pressure terlalu tinggi",
+            "Iterasi 1 (Action Immediate)": "Jalankan baking material PC & pertahankan Hold Pressure < 3000 kgf/cm²",
+            "Iterasi 2 (Action Mold/Tooling)": "Optimasi V/P Transfer (1st & 2nd stage) via OFAT/DOE",
+            "Iterasi 3 (Standardisasi & Control)": "Monitoring gate freeze curve (optimal hold time 5-6s)",
+            "Status": "Open"
+        },
+        {
+            "Project": "Mantis",
+            "Part": "Cap Mantis / Tube support",
+            "Mesin": "ARBURG 70T LSR",
+            "Defect / Issue": "Uneven Surface & Depth Issue",
+            "Penyebab Utama (Root Cause)": "Pengukuran area dome LSR bergelombang / fleksibel",
+            "Iterasi 1 (Action Immediate)": "Gunakan jig acrylic / 3D print khusus untuk penahan part",
+            "Iterasi 2 (Action Mold/Tooling)": "Gunakan Keyence Microscope untuk area flat & dome",
+            "Iterasi 3 (Standardisasi & Control)": "Jalankan GRnR jig depth micrometer (A8/I95)",
+            "Status": "Open"
+        }
+    ]
+
+    df_cat = pd.DataFrame(catalog_database)
+
+    # Filter tampilan sesuai Project yang aktif dipilih di header
+    filtered_df = df_cat[df_cat["Project"] == sel_proj]
+    
+    if filtered_df.empty:
+        st.warning(f"Belum ada data spesifik untuk Project **{sel_proj}**. Menampilkan seluruh katalog isu:")
+        st.dataframe(df_cat, use_container_width=True)
+    else:
+        st.success(f"Menampilkan katalog isu terdaftar untuk **{sel_proj}** ({MASTER_PROJECTS[sel_proj]['mesin']}):")
+        st.dataframe(filtered_df, use_container_width=True)
+
+    st.divider()
+
+    # Section Visual / Upload Gambar Contoh Defek & Solusi
+    st.markdown("### 🖼️ Contoh Visual & Dokumen Perbaikan")
+    c_img1, c_img2 = st.columns(2)
+    with c_img1:
+        st.markdown("**1️⃣ Foto Defek (Before Action)**")
+        img_b = st.file_uploader(f"Upload Foto NG ({sel_part})", type=["png", "jpg", "jpeg"], key=f"cat_img_b_{current_key}")
+        if img_b:
+            st.image(img_b, caption=f"Defek Sebelum Perbaikan - {sel_part}", use_column_width=True)
+    with c_img2:
+        st.markdown("**2️⃣ Foto Hasil Trial OK (After Action)**")
+        img_a = st.file_uploader(f"Upload Foto OK ({sel_part})", type=["png", "jpg", "jpeg"], key=f"cat_img_a_{current_key}")
+        if img_a:
+            st.image(img_a, caption=f"Kondisi OK Setelah Trial - {sel_part}", use_column_width=True)
 
 def tab_wi_comparison():
     st.subheader(f"🔍 WI Comparison - OLD vs NEW - {sel_proj} > {sel_part}")
