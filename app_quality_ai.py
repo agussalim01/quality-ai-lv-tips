@@ -265,7 +265,6 @@ def tab_wi_comparison():
                 def fetch_text_from_link(url):
                     try:
                         clean_url = url.strip()
-                        # Clean Google Docs / Sheets ID parser
                         if "/d/" in clean_url:
                             doc_id = clean_url.split("/d/")[1].split("/")[0]
                         else:
@@ -277,8 +276,54 @@ def tab_wi_comparison():
                             if res.status_code == 200:
                                 return res.text
                             else:
-                                st.error(f"⚠️ Gagal membaca Google Docs. Pastikan akses di-set ke 'Anyone with the link' (Public).")
+                                st.error("⚠️ Gagal membaca Google Docs. Pastikan akses di-set ke 'Anyone with the link' (Public).")
                                 return ""
                         elif "docs.google.com/spreadsheets" in clean_url:
                             export_url = f"https://docs.google.com/spreadsheets/d/{doc_id}/export?format=csv"
-                            res = requests.get(
+                            res = requests.get(export_url)
+                            if res.status_code == 200:
+                                return res.text
+                            else:
+                                return universal_parser(clean_url).get("define", "")
+                        return ""
+                    except Exception as e:
+                        st.error(f"Error parse URL: {e}")
+                        return ""
+
+                old_text = fetch_text_from_link(url_old)
+                new_text = fetch_text_from_link(url_new)
+
+    if old_text and new_text:
+        diff_result_html = generate_doc_diff_html(old_text, new_text)
+        st.subheader("📑 Perbandingan Dokumen (Google Docs / Sheets Style)")
+        with st.container(border=True):
+            legend_html = (
+                '<b>Legenda Perubahan:</b> '
+                '<span style="background-color: #ffebe9; color: #cf222e; text-decoration: line-through; padding: 2px 6px; border-radius: 3px;">Teks Dihapus</span> '
+                '<span style="background-color: #dafbe1; color: #1a7f37; font-weight: bold; padding: 2px 6px; border-radius: 3px;">Teks Ditambahkan</span>'
+            )
+            st.markdown(legend_html, unsafe_allow_html=True)
+            st.divider()
+            st.markdown(f'<div style="line-height: 1.8; font-family: sans-serif; background: #ffffff; padding: 15px; border-radius: 5px; border: 1px solid #ddd; max-height: 600px; overflow-y: auto;">{diff_result_html}</div>', unsafe_allow_html=True)
+
+        if AI_AVAILABLE:
+            st.divider()
+            if st.button("🤖 Review Hasil Perubahan WI Ini Menggunakan Gemini AI", type="primary", key=f"btn_ai_wicomp_{current_key}"):
+                with st.spinner("AI sedang mengevaluasi..."):
+                    review_res = analyze_wi_text(old_text, new_text, sel_proj, sel_part)
+                    st.markdown("### 📋 Laporan Review AI:")
+                    st.markdown(review_res)
+    else:
+        st.info("👆 Masukkan kedua file atau link (Google Docs/Sheets) di atas untuk melihat hasil perbandingan.")
+
+# =================== RENDER TAB ===================
+t1, t2, t3, t4, t5, t6, t7 = st.tabs(["🌀 DMAIC", "📏 MSA 44 Rows", "📄 WI Generator", "📸 Screenshot", "🧪 Trial Report", "📚 Catalog All Issue", "🔍 WI Comparison V3 HEADER REAL"])
+with t1: tab_dmaic()
+with t2: tab_msa()
+with t3: tab_wi()
+with t4: tab_screenshot()
+with t5: tab_trial()
+with t6: tab_catalog()
+with t7: tab_wi_comparison()
+
+st.success(f"V6 FINAL V3 - {sel_proj} > {sel_part} - Ready!")
