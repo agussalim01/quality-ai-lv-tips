@@ -2,6 +2,6 @@ streamlit
 pandas
 plotly
 python-docx
+PyMuPDF
 Pillow
-openpyxl
-xlrd
+google-generativeai
