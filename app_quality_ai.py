@@ -1,4 +1,4 @@
-# app_quality_ai.py - V6 FINAL FIXED V3 - FULL AI & DOCS COMPARE INTEGRATED
+# app_quality_ai.py - V6 FINAL FIXED V3 - SAFE EDIT & AI INTEGRATED
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -7,20 +7,20 @@ import io
 from datetime import datetime
 import difflib
 
-# Safe Import untuk ai_helper agar aplikasi tidak crash jika library belum terinstall
+# Safe Import untuk ai_helper agar aplikasi tidak crash/blank
 AI_AVAILABLE = False
 try:
     import ai_helper
     from ai_helper import analyze_wi_text, analyze_trial_screenshot
     AI_AVAILABLE = True
 except Exception as e:
-    st.warning(f"⚠️ Fitur AI sementara nonaktif (Detail: {e})")
+    pass
 
 st.set_page_config(page_title="Quality AI V6 FINAL V3 HEADER REAL", page_icon="📊", layout="wide")
 
 # =================== CACHING & UTILS ===================
+@st.cache_data(show_spinner=False)
 def extract_file_content(file_bytes, file_name):
-    """Membaca isi file docx/pdf secara efisien dengan caching agar upload tidak lama."""
     try:
         if file_name.lower().endswith('.docx'):
             doc = Document(io.BytesIO(file_bytes))
@@ -36,10 +36,8 @@ def extract_file_content(file_bytes, file_name):
         return str(e)
 
 def generate_doc_diff_html(old_text, new_text):
-    """Menghasilkan perbandingan teks ala Google Docs (Merah = Terhapus, Hijau = Ditambah)"""
     old_words = old_text.split()
     new_words = new_text.split()
-    
     matcher = difflib.SequenceMatcher(None, old_words, new_words)
     diff_html = []
     
@@ -204,7 +202,6 @@ def tab_screenshot():
     f_before = st.file_uploader(f"Before {sel_part}", type=["jpg", "png"], key=f"ssb_{current_key}")
     f_after = st.file_uploader(f"After {sel_part}", type=["jpg", "png"], key=f"ssa_{current_key}")
     
-    # Integrasi AI Vision Analysis
     if f_before and f_after and AI_AVAILABLE:
         if st.button("✨ Auto-Analisis Before/After dengan Gemini AI", key=f"btn_ai_ss_{current_key}"):
             from PIL import Image
@@ -229,16 +226,12 @@ def tab_catalog():
     df = pd.DataFrame(all_rows)
     st.dataframe(df, use_container_width=True, height=400)
 
-# =================== TAB 7: WI COMPARISON (SUPPORT LINK & FILE) ===================
 def tab_wi_comparison():
     st.subheader(f"🔍 WI Comparison - OLD vs NEW - {sel_proj} > {sel_part}")
     st.caption("Bisa membandingkan dari Upload File (.docx/.pdf) atau langsung memasukkan Link Dokumen.")
 
-    # Pilihan Metode Input: Upload File atau Masukkan Link
     input_type = st.radio("Pilih Metode Input:", ["📄 Upload File", "🔗 Link Dokumen / Sheets"], horizontal=True, key=f"radio_in_{current_key}")
-
-    old_text = ""
-    new_text = ""
+    old_text, new_text = "", ""
 
     if input_type == "📄 Upload File":
         c_old, c_new = st.columns(2)
@@ -250,45 +243,25 @@ def tab_wi_comparison():
         if old_file and new_file:
             old_text = extract_file_content(old_file.getvalue(), old_file.name)
             new_text = extract_file_content(new_file.getvalue(), new_file.name)
-
     else:
-        # Input via LINK
         c_link_old, c_link_new = st.columns(2)
         with c_link_old:
-            url_old = st.text_input("🔗 Paste Link OLD Document / Sheets:", placeholder="https://docs.google.com/...", key=f"url_old_{current_key}")
+            url_old = st.text_input("🔗 Link OLD Document/Sheets:", placeholder="https://docs.google.com/...", key=f"url_old_{current_key}")
         with c_link_new:
-            url_new = st.text_input("🔗 Paste Link NEW Document / Sheets:", placeholder="https://docs.google.com/...", key=f"url_new_{current_key}")
+            url_new = st.text_input("🔗 Link NEW Document/Sheets:", placeholder="https://docs.google.com/...", key=f"url_new_{current_key}")
 
         if url_old and url_new:
             with st.spinner("Mengambil konten dari link..."):
-                # Ekstrak data jika berupa Google Sheets
                 if "docs.google.com/spreadsheets" in url_old and "docs.google.com/spreadsheets" in url_new:
                     p_old = universal_parser(url_old)
                     p_new = universal_parser(url_new)
                     old_text = f"{p_old['define']}\n{p_old['measure']}\n{p_old['analyze']}\n{p_old['improve']}\n{p_old['control']}"
                     new_text = f"{p_new['define']}\n{p_new['measure']}\n{p_new['analyze']}\n{p_new['improve']}\n{p_new['control']}"
-                else:
-                    st.warning("Untuk Link Google Docs (Word), pastikan akses link diset 'Anyone with link' atau gunakan ekspor format teks.")
 
-    # Tampilkan Hasil Perbandingan jika teks sudah berhasil didapat dari file/link
     if old_text and new_text:
         diff_result_html = generate_doc_diff_html(old_text, new_text)
-
         st.subheader("📑 Perbandingan Dokumen (Google Docs Style)")
         with st.container(border=True):
             st.markdown("**Legenda Perubahan:** "
                         '<span style="background-color: #ffebe9; color: #cf222e; text-decoration: line-through; padding: 2px 6px; border-radius: 3px;">Teks Dihapus</span> '
-                        '<span style="background-color: #dafbe1; color: #1a7f37; font-weight: bold; padding: 2px 6px; border-radius: 3px;">Teks Ditambahkan</span>', 
-                        unsafe_allow_html=True)
-            st.divider()
-            st.markdown(f'<div style="line-height: 1.8; font-family: sans-serif; background: #ffffff; padding: 15px; border-radius: 5px; border: 1px solid #ddd; max-height: 600px; overflow-y: auto;">{diff_result_html}</div>', unsafe_allow_html=True)
-
-        if AI_AVAILABLE:
-            st.divider()
-            if st.button("🤖 Review Hasil Perubahan WI Ini Menggunakan Gemini AI", type="primary", key=f"btn_ai_wicomp_{current_key}"):
-                with st.spinner("AI sedang mengevaluasi kepatuhan format & standar dokumen..."):
-                    review_res = analyze_wi_text(old_text, new_text, sel_proj, sel_part)
-                    st.markdown("### 📋 Laporan Review AI (Standardisasi Quality):")
-                    st.markdown(review_res)
-    else:
-        st.info("👆 Masukkan kedua file atau link di atas untuk memulai perbandingan secara otomatis.")
+                        '<span style="background-color: #dafbe1; color: #1a7f37; font-weight: bold; padding: 2px 6px; border-radius: 3px;">Teks Ditambahkan</span>',
