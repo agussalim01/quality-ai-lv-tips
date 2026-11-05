@@ -1,4 +1,4 @@
-# app_quality_ai.py - V6 FINAL FIXED V3 - FULL COMPREHENSIVE CODE
+# app_quality_ai.py - V6 FINAL FIXED V3 - FULL 7 TABS WITH IMAGE CATALOG
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -65,34 +65,3 @@ def generate_side_by_side_html(old_text, new_text):
     return " ".join(old_html), " ".join(new_html)
 
 def safe_join(row):
-    vals = []
-    for v in row.values:
-        try:
-            if pd.isna(v): continue
-            s = str(v).strip()
-            if s.lower() not in ['nan', '']: vals.append(s)
-        except: continue
-    return ' '.join(vals)
-
-def universal_parser(file_or_link):
-    result = {"cav_df": pd.DataFrame(), "pareto": pd.DataFrame(), "define": "", "measure": "", "analyze": "", "improve": "", "control": "", "info": ""}
-    try:
-        xls = None
-        if isinstance(file_or_link, str) and 'docs.google.com' in file_or_link:
-            fid = file_or_link.split('/d/')[1].split('/')[0]
-            url = f"https://docs.google.com/spreadsheets/d/{fid}/export?format=xlsx"
-            xls = pd.ExcelFile(url)
-            result["info"] = "Link OK; "
-        elif hasattr(file_or_link, 'name'):
-            xls = pd.ExcelFile(file_or_link)
-        else: return result
-        
-        for sh in xls.sheet_names:
-            df0 = xls.parse(sh, header=None)
-            txt = df0.apply(safe_join, axis=1).str.cat(sep=' ').lower()
-            if 'define' in txt:
-                for _, r in df0.iterrows():
-                    rt = safe_join(r)
-                    if len(rt) < 12: continue
-                    if 'flashing' in rt.lower(): result["define"] += rt + "\n"
-                    if 'actual condition' in rt.lower(): result["measure"] += rt + "\n"
