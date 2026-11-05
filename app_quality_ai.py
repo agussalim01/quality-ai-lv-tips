@@ -7,17 +7,18 @@ import io
 from datetime import datetime
 import difflib
 
-# Import Modul AI (ai_helper.py) jika tersedia
+# Safe Import untuk ai_helper agar aplikasi tidak crash jika library belum terinstall
+AI_AVAILABLE = False
 try:
+    import ai_helper
     from ai_helper import analyze_wi_text, analyze_trial_screenshot
     AI_AVAILABLE = True
-except Exception:
-    AI_AVAILABLE = False
+except Exception as e:
+    st.warning(f"⚠️ Fitur AI sementara nonaktif (Detail: {e})")
 
 st.set_page_config(page_title="Quality AI V6 FINAL V3 HEADER REAL", page_icon="📊", layout="wide")
 
 # =================== CACHING & UTILS ===================
-@st.cache_data(show_spinner=False)
 def extract_file_content(file_bytes, file_name):
     """Membaca isi file docx/pdf secara efisien dengan caching agar upload tidak lama."""
     try:
