@@ -18,7 +18,8 @@ def build_wi_docx(project, part, method, tools="", prepared_by="", revision="DRA
     # images, headers, footers, page dimensions and styles unchanged.
     doc = Document(str(TEMPLATE_PATH))
     doc.add_page_break()
-    doc.add_heading("ENGINEERING INPUT - UNAPPROVED DRAFT", level=1)
+    heading = doc.add_paragraph()
+    heading.add_run("ENGINEERING INPUT - UNAPPROVED DRAFT").bold = True
     doc.add_paragraph(
         "This page is an automatically generated draft appendix. "
         "It does not populate or approve the controlled fields in the master WI template."
