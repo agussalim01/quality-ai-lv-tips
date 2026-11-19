@@ -218,11 +218,18 @@ def tab_wi():
     revision = st.text_input("Revision", value="DRAFT", key=f"wi_revision_v2_{current_key}")
     st.caption("Nilai Control dari modul DMAIC tidak disalin otomatis karena data lama mungkin berupa contoh.")
     st.text_area("Preview WI", value=f"WORK INSTRUCTION - {sel_proj} - {sel_part}\\nRevision: {revision}\\nMethod: {method or '[not specified]'}\\nTools: {tools or '[not specified]'}\\nStatus: DRAFT - NOT APPROVED", height=150, disabled=True)
+    orientation = st.radio("Format WI", ["Landscape", "Portrait"], horizontal=True, key=f"wi_orientation_{current_key}")
+    portrait_bytes = None
+    if orientation == "Portrait":
+        st.caption("Gunakan template Portrait asli TMP-11-001-0003 rev. 1. Upload ulang jika sesi Streamlit dimulai kembali.")
+        portrait_file = st.file_uploader("Upload template WI Portrait asli (.docx)", type=["docx"], key=f"wi_portrait_template_{current_key}")
+        if portrait_file is not None:
+            portrait_bytes = portrait_file.getvalue()
     if not method.strip():
         st.info("Isi Work method / Control untuk mengaktifkan download Word.")
     else:
         try:
-            docx_bytes = build_wi_docx(sel_proj, sel_part, method, tools, prepared_by, revision)
+            docx_bytes = build_wi_docx(sel_proj, sel_part, method, tools, prepared_by, revision, orientation=orientation, portrait_template_bytes=portrait_bytes)
             st.download_button("⬇️ Download Draft WI (.docx)", data=docx_bytes, file_name="WI_DRAFT.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"wi_download_v2_{current_key}")
         except Exception as exc:
             st.error(f"Gagal membuat dokumen WI: {exc}")
