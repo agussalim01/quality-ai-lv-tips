@@ -208,11 +208,24 @@ def tab_msa():
     st.dataframe(df, use_container_width=True)
 
 def tab_wi():
+    from wi_export import build_wi_docx
     st.subheader(f"📄 WI Generator - {sel_proj} > {sel_part}")
+    st.warning("DRAFT ONLY: Periksa seluruh isi WI dan dapatkan approval sebelum digunakan di produksi.")
     d = current_data
-    method = st.text_area("Control", d.get("control", "Daily visual per Cav 1-8 + 1.3mm jig"), height=80, key=f"wi_{current_key}")
-    wi_txt = f"WORK INSTRUCTION - {sel_proj} - {sel_part}\nMethod: {method}\nTool: 1.3mm jig"
-    st.code(wi_txt)
+    method = st.text_area("Work method / Control (engineer input)", value="", height=120, key=f"wi_method_v2_{current_key}", placeholder="Masukkan instruksi yang telah diverifikasi. Jangan gunakan contoh data sebagai fakta.")
+    tools = st.text_input("Tools / Equipment (optional)", value="", key=f"wi_tools_v2_{current_key}", placeholder="Masukkan alat yang benar-benar digunakan")
+    prepared_by = st.text_input("Prepared by (optional)", key=f"wi_prepared_v2_{current_key}")
+    revision = st.text_input("Revision", value="DRAFT", key=f"wi_revision_v2_{current_key}")
+    st.caption("Nilai Control dari modul DMAIC tidak disalin otomatis karena data lama mungkin berupa contoh.")
+    st.text_area("Preview WI", value=f"WORK INSTRUCTION - {sel_proj} - {sel_part}\\nRevision: {revision}\\nMethod: {method or '[not specified]'}\\nTools: {tools or '[not specified]'}\\nStatus: DRAFT - NOT APPROVED", height=150, disabled=True)
+    if not method.strip():
+        st.info("Isi Work method / Control untuk mengaktifkan download Word.")
+    else:
+        try:
+            docx_bytes = build_wi_docx(sel_proj, sel_part, method, tools, prepared_by, revision)
+            st.download_button("⬇️ Download Draft WI (.docx)", data=docx_bytes, file_name="WI_DRAFT.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"wi_download_v2_{current_key}")
+        except Exception as exc:
+            st.error(f"Gagal membuat dokumen WI: {exc}")
 
 def tab_screenshot():
     st.subheader(f"📸 Screenshot - {sel_proj} > {sel_part}")
