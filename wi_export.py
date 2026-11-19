@@ -25,7 +25,7 @@ def build_wi_docx(project, part, method, tools="", prepared_by="", revision="DRA
         "It does not populate or approve the controlled fields in the master WI template."
     )
     table = doc.add_table(rows=0, cols=2)
-    table.style = "Table Grid"
+    # Preserve the source template table defaults; do not require Table Grid.
     fields = [
         ("Project", project),
         ("Part", part),
